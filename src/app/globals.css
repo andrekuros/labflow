@@ -1,0 +1,199 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Indigo ---- */
+[data-palette="indigo"][data-mode="dark"],
+:root {
+  --bg: 9 9 17;
+  --surface: 20 20 33;
+  --surface-2: 30 30 48;
+  --border: 44 44 66;
+  --fg: 226 232 240;
+  --muted: 148 163 184;
+  --brand: 129 110 255;
+  --brand-fg: 255 255 255;
+}
+[data-palette="indigo"][data-mode="light"] {
+  --bg: 248 250 252;
+  --surface: 255 255 255;
+  --surface-2: 241 245 249;
+  --border: 226 232 240;
+  --fg: 15 23 42;
+  --muted: 100 116 139;
+  --brand: 79 70 229;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Ocean ---- */
+[data-palette="ocean"][data-mode="dark"] {
+  --bg: 8 15 28;
+  --surface: 15 28 46;
+  --surface-2: 22 40 62;
+  --border: 36 58 88;
+  --fg: 224 242 254;
+  --muted: 125 168 200;
+  --brand: 6 182 212;
+  --brand-fg: 8 15 28;
+}
+[data-palette="ocean"][data-mode="light"] {
+  --bg: 240 249 255;
+  --surface: 255 255 255;
+  --surface-2: 224 242 254;
+  --border: 186 230 253;
+  --fg: 12 74 110;
+  --muted: 14 116 144;
+  --brand: 8 145 178;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Forest ---- */
+[data-palette="forest"][data-mode="dark"] {
+  --bg: 8 18 12;
+  --surface: 16 28 22;
+  --surface-2: 24 40 32;
+  --border: 40 62 50;
+  --fg: 220 252 231;
+  --muted: 134 168 148;
+  --brand: 34 197 94;
+  --brand-fg: 8 18 12;
+}
+[data-palette="forest"][data-mode="light"] {
+  --bg: 240 253 244;
+  --surface: 255 255 255;
+  --surface-2: 220 252 231;
+  --border: 187 247 208;
+  --fg: 20 83 45;
+  --muted: 22 101 52;
+  --brand: 22 163 74;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Sunset ---- */
+[data-palette="sunset"][data-mode="dark"] {
+  --bg: 20 12 8;
+  --surface: 32 22 18;
+  --surface-2: 48 32 26;
+  --border: 72 48 38;
+  --fg: 255 247 237;
+  --muted: 180 150 130;
+  --brand: 249 115 22;
+  --brand-fg: 20 12 8;
+}
+[data-palette="sunset"][data-mode="light"] {
+  --bg: 255 247 237;
+  --surface: 255 255 255;
+  --surface-2: 254 243 226;
+  --border: 253 186 116;
+  --fg: 124 45 18;
+  --muted: 154 52 18;
+  --brand: 234 88 12;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Rose ---- */
+[data-palette="rose"][data-mode="dark"] {
+  --bg: 18 10 16;
+  --surface: 30 20 28;
+  --surface-2: 44 30 42;
+  --border: 68 46 62;
+  --fg: 253 242 248;
+  --muted: 190 150 175;
+  --brand: 244 114 182;
+  --brand-fg: 18 10 16;
+}
+[data-palette="rose"][data-mode="light"] {
+  --bg: 253 242 248;
+  --surface: 255 255 255;
+  --surface-2: 252 231 243;
+  --border: 251 207 232;
+  --fg: 131 24 67;
+  --muted: 157 23 77;
+  --brand: 219 39 119;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Amber ---- */
+[data-palette="amber"][data-mode="dark"] {
+  --bg: 18 14 8;
+  --surface: 30 24 14;
+  --surface-2: 46 36 20;
+  --border: 68 54 30;
+  --fg: 254 252 232;
+  --muted: 180 160 120;
+  --brand: 245 158 11;
+  --brand-fg: 18 14 8;
+}
+[data-palette="amber"][data-mode="light"] {
+  --bg: 254 252 232;
+  --surface: 255 255 255;
+  --surface-2: 254 249 195;
+  --border: 253 224 71;
+  --fg: 113 63 18;
+  --muted: 146 64 14;
+  --brand: 217 119 6;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Slate ---- */
+[data-palette="slate"][data-mode="dark"] {
+  --bg: 10 12 16;
+  --surface: 20 24 32;
+  --surface-2: 30 36 48;
+  --border: 46 54 68;
+  --fg: 226 232 240;
+  --muted: 148 163 184;
+  --brand: 100 116 139;
+  --brand-fg: 255 255 255;
+}
+[data-palette="slate"][data-mode="light"] {
+  --bg: 248 250 252;
+  --surface: 255 255 255;
+  --surface-2: 241 245 249;
+  --border: 203 213 225;
+  --fg: 15 23 42;
+  --muted: 100 116 139;
+  --brand: 71 85 105;
+  --brand-fg: 255 255 255;
+}
+
+/* ---- Crimson ---- */
+[data-palette="crimson"][data-mode="dark"] {
+  --bg: 18 8 10;
+  --surface: 32 16 20;
+  --surface-2: 48 24 30;
+  --border: 72 36 44;
+  --fg: 254 242 242;
+  --muted: 190 140 150;
+  --brand: 239 68 68;
+  --brand-fg: 255 255 255;
+}
+[data-palette="crimson"][data-mode="light"] {
+  --bg: 254 242 242;
+  --surface: 255 255 255;
+  --surface-2: 254 226 226;
+  --border: 252 165 165;
+  --fg: 127 29 29;
+  --muted: 153 27 27;
+  --brand: 220 38 38;
+  --brand-fg: 255 255 255;
+}
+
+* {
+  border-color: rgb(var(--border));
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--fg));
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--border));
+  border-radius: 9999px;
+}

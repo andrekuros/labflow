@@ -1,0 +1,348 @@
+// LabFlow data model.
+// Dev uses SQLite for zero-infra setup. To move to PostgreSQL + pgvector:
+//   1. set provider = "postgresql" and DATABASE_URL accordingly
+//   2. embeddings are stored as JSON strings (portable); switch to a vector column when on pgvector.
+// Enums are modeled as String fields (SQLite has no native enums); allowed values are documented inline.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  // global role: admin | researcher | phd | msc | student
+  role         String   @default("researcher")
+  title        String? // e.g. "PhD candidate", "Postdoc"
+  avatarColor  String   @default("#6366f1")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships   ProjectMembership[]
+  assignedTasks Task[]              @relation("TaskAssignees")
+  createdTasks  Task[]              @relation("TaskCreator")
+  comments      Comment[]
+  posts         Post[]
+  threads       Thread[]
+  articles      KnowledgeArticle[]
+  agentRuns     AgentRun[]
+}
+
+model ProjectMembership {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  // project role: lead | contributor | viewer
+  role      String   @default("contributor")
+  createdAt DateTime @default(now())
+
+  @@unique([userId, projectId])
+}
+
+// ---------------------------------------------------------------------------
+// Projects, work breakdown structure (activities) & tasks
+// ---------------------------------------------------------------------------
+
+model Project {
+  id          String   @id @default(cuid())
+  key         String   @unique // short code, e.g. "BIO"
+  name        String
+  description String?
+  color       String   @default("#6366f1")
+  // status: active | paused | archived
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships  ProjectMembership[]
+  workPackages WorkPackage[]
+  tasks        Task[]
+  sprints      Sprint[]
+  deliverables Deliverable[]
+  milestones   Milestone[]
+  requirements Requirement[]
+  labels       Label[]
+  channels     Channel[]
+  articles     KnowledgeArticle[]
+}
+
+// Work package / activity (WBS node, hierarchical -> systems engineering).
+model WorkPackage {
+  id          String   @id @default(cuid())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  parent      WorkPackage?  @relation("WBS", fields: [parentId], references: [id], onDelete: SetNull)
+  parentId    String?
+  children    WorkPackage[] @relation("WBS")
+  code        String? // e.g. "1.2.3"
+  name        String
+  description String?
+  // status: planned | in_progress | done | blocked
+  status      String   @default("planned")
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tasks        Task[]
+  deliverables Deliverable[]
+  requirements Requirement[] @relation("RequirementActivities")
+}
+
+model Task {
+  id            String   @id @default(cuid())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  workPackage   WorkPackage? @relation(fields: [workPackageId], references: [id], onDelete: SetNull)
+  workPackageId String?
+  sprint        Sprint?  @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  sprintId      String?
+  title         String
+  description   String?
+  // status maps to kanban column: backlog | todo | in_progress | review | done
+  status        String   @default("backlog")
+  // priority: low | medium | high | urgent
+  priority      String   @default("medium")
+  estimate      Float? // story points / hours
+  startDate     DateTime?
+  dueDate       DateTime?
+  order         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  creator    User?   @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  creatorId  String?
+  assignees  User[]  @relation("TaskAssignees")
+  labels     Label[] @relation("TaskLabels")
+  comments   Comment[]
+}
+
+model Label {
+  id        String  @id @default(cuid())
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  name      String
+  color     String  @default("#64748b")
+  tasks     Task[]  @relation("TaskLabels")
+
+  @@unique([projectId, name])
+}
+
+model Sprint {
+  id        String    @id @default(cuid())
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  name      String
+  goal      String?
+  startDate DateTime?
+  endDate   DateTime?
+  // status: planned | active | completed
+  status    String    @default("planned")
+  createdAt DateTime  @default(now())
+
+  tasks Task[]
+}
+
+// ---------------------------------------------------------------------------
+// Deliverables, requirements/goals, roadmap (systems engineering)
+// ---------------------------------------------------------------------------
+
+model Deliverable {
+  id            String   @id @default(cuid())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  workPackage   WorkPackage? @relation(fields: [workPackageId], references: [id], onDelete: SetNull)
+  workPackageId String?
+  name          String
+  description   String?
+  acceptance    String? // acceptance criteria
+  // status: pending | in_progress | submitted | accepted | rejected
+  status        String   @default("pending")
+  dueDate       DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  requirements Requirement[] @relation("RequirementDeliverables")
+}
+
+model Requirement {
+  id          String   @id @default(cuid())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  code        String? // e.g. "REQ-001"
+  title       String
+  description String?
+  // kind: goal | functional | nonfunctional | constraint
+  kind        String   @default("goal")
+  // priority: low | medium | high
+  priority    String   @default("medium")
+  // status: proposed | approved | implemented | verified
+  status      String   @default("proposed")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deliverables Deliverable[] @relation("RequirementDeliverables")
+  activities   WorkPackage[] @relation("RequirementActivities")
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  name        String
+  description String?
+  // kind: milestone | verification | validation | release
+  kind        String   @default("milestone")
+  date        DateTime?
+  // status: upcoming | reached | missed
+  status      String   @default("upcoming")
+  createdAt   DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge management + embeddings (RAG)
+// ---------------------------------------------------------------------------
+
+model KnowledgeArticle {
+  id        String   @id @default(cuid())
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId  String?
+  title     String
+  content   String   @default("")
+  tags      String   @default("") // comma-separated
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Generic embedding store, alimentado pela ingestao de conhecimento.
+model Embedding {
+  id         String   @id @default(cuid())
+  // sourceType: article | post | comment | task | deliverable
+  sourceType String
+  sourceId   String
+  projectId  String?
+  chunk      String
+  // JSON-encoded float[] (portavel; troque por coluna vector no pgvector)
+  vector     String
+  createdAt  DateTime @default(now())
+
+  @@index([sourceType, sourceId])
+}
+
+// ---------------------------------------------------------------------------
+// Communication (forums)
+// ---------------------------------------------------------------------------
+
+model Channel {
+  id          String   @id @default(cuid())
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+
+  threads Thread[]
+}
+
+model Thread {
+  id        String   @id @default(cuid())
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId String
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId  String?
+  title     String
+  // status: open | resolved
+  status    String   @default("open")
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts Post[]
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  thread    Thread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  threadId  String
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId  String?
+  content   String
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Cross-cutting: comments, activity log, plugins, AI agents
+// ---------------------------------------------------------------------------
+
+model Comment {
+  id        String   @id @default(cuid())
+  task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId    String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId  String?
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  // event type, e.g. "task.created", "post.created"
+  type       String
+  actorId    String?
+  projectId  String?
+  payload    String   @default("{}") // JSON string
+  createdAt  DateTime @default(now())
+
+  @@index([projectId])
+  @@index([type])
+}
+
+model Plugin {
+  id          String   @id @default(cuid())
+  pluginId    String   @unique // matches manifest id
+  name        String
+  version     String   @default("0.0.0")
+  enabled     Boolean  @default(true)
+  config      String   @default("{}") // JSON string
+  installedAt DateTime @default(now())
+}
+
+model AgentConfig {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. "task_assistant"
+  name        String
+  description String?
+  // system prompt / instructions
+  instructions String  @default("")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  runs AgentRun[]
+}
+
+model AgentRun {
+  id        String   @id @default(cuid())
+  agent     AgentConfig @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  agentId   String
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId    String?
+  input     String
+  output    String   @default("")
+  // status: pending | running | done | error
+  status    String   @default("done")
+  createdAt DateTime @default(now())
+}
