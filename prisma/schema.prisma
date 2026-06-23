@@ -66,6 +66,7 @@ model Project {
   color       String   @default("#6366f1")
   // status: active | paused | archived
   status      String   @default("active")
+  conops      String   @default("{}") // JSON: mission, scope, stakeholders, etc.
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -83,6 +84,7 @@ model Project {
   systemElements SystemElement[]
   interfaces   Interface[]
   verificationCases VerificationCase[]
+  aiDrafts     AiDraft[]
 }
 
 // Work package / activity (WBS node, hierarchical -> systems engineering).
@@ -273,6 +275,26 @@ model Milestone {
   createdAt   DateTime @default(now())
 
   verificationCases VerificationCase[]
+}
+
+// AI-generated or imported artifacts awaiting human review.
+model AiDraft {
+  id           String   @id @default(cuid())
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId    String
+  // artifactType: requirement | task | deliverable | work_package | milestone | system_element | verification_case
+  artifactType String
+  title        String
+  payload      String   // JSON artifact data (LabFlow import format)
+  // source: ai | import
+  source       String   @default("ai")
+  // status: pending | accepted | rejected
+  status       String   @default("pending")
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([projectId, status])
 }
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label } from "@/components/ui";
 import { createProject, createProjectFromTemplate, createWorkPackage, createLabel, addMember } from "@/plugins/projects/actions";
 import { createSprint } from "@/plugins/sprints/actions";
+import { PROJECT_TEMPLATES, type ProjectTemplateKey } from "@/plugins/projects/templates";
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -28,8 +29,9 @@ export function NewProjectButton() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("#6366f1");
-  const [template, setTemplate] = useState<"blank" | "se">("blank");
+  const [template, setTemplate] = useState<ProjectTemplateKey>("blank");
   const [pending, start] = useTransition();
+  const selectedTpl = PROJECT_TEMPLATES.find((t) => t.key === template) ?? PROJECT_TEMPLATES[0];
 
   return (
     <>
@@ -45,10 +47,12 @@ export function NewProjectButton() {
             <div><Label>Cor</Label><input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-16 rounded-lg border border-border bg-surface2" /></div>
             <div>
               <Label>Template</Label>
-              <Select value={template} onChange={(e) => setTemplate(e.target.value as "blank" | "se")} className="w-full">
-                <option value="blank">Projeto em branco</option>
-                <option value="se">Engenharia de Sistemas (WBS + gates + SoI)</option>
+              <Select value={template} onChange={(e) => setTemplate(e.target.value as ProjectTemplateKey)} className="w-full">
+                {PROJECT_TEMPLATES.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
               </Select>
+              <p className="mt-1 text-xs text-muted">{selectedTpl.description}</p>
             </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>

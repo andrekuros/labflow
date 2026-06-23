@@ -33,6 +33,8 @@ export async function bootstrapAsync() {
   startNextcloudAutoSync();
   const { startDueDateNotifier } = await import("@/lib/notification-scheduler");
   startDueDateNotifier();
+  const { ensureArtifactsFormatArticle } = await import("@/lib/artifacts/ensure-doc");
+  await ensureArtifactsFormatArticle();
 }
 
 async function ingestFromEvent(

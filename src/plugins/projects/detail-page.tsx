@@ -6,6 +6,11 @@ import { canViewProject, canWriteProject } from "@/lib/rbac";
 import { Card, Badge, Avatar, PageHeader, LinkButton } from "@/components/ui";
 import { AddWorkPackageForm, AddLabelForm, AddMemberForm } from "@/components/projects/project-forms";
 import { ProjectCockpit } from "@/components/projects/project-cockpit";
+import { ConopsPanel } from "@/components/projects/conops-panel";
+import { AiDraftsPanel } from "@/components/projects/ai-drafts-panel";
+import { ArtifactsIo } from "@/components/projects/artifacts-io";
+import { parseConops } from "@/lib/artifacts/schema";
+import { getExistingArtifactSummary } from "@/lib/artifacts/existing-summary";
 import { KanbanSquare } from "lucide-react";
 
 const WBS_STATUS: Record<string, string> = { planned: "Planejada", in_progress: "Em andamento", done: "Concluida", blocked: "Bloqueada" };
@@ -28,7 +33,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   });
   if (!project) notFound();
 
-  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount] = await Promise.all([
+  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount, pendingDrafts, formatDoc, artifactSummary] = await Promise.all([
     prisma.task.count({ where: { projectId: id, status: { not: "done" } } }),
     prisma.deliverable.findMany({
       where: { projectId: id, status: { notIn: ["accepted", "rejected"] } },
@@ -49,6 +54,15 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     prisma.verificationCase.count({ where: { projectId: id, status: "passed" } }),
     prisma.verificationCase.count({ where: { projectId: id } }),
     prisma.systemElement.count({ where: { projectId: id } }),
+    prisma.aiDraft.findMany({
+      where: { projectId: id, status: "pending" },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.knowledgeArticle.findFirst({
+      where: { title: "Formato JSON de artefatos LabFlow", projectId: null },
+      select: { id: true },
+    }),
+    getExistingArtifactSummary(id),
   ]);
 
   const linkCount = await prisma.knowledgeLink.count({
@@ -146,6 +160,30 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         vvTotal={vvTotal}
         systemElementCount={systemElementCount}
       />
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <ConopsPanel
+          projectId={project.id}
+          initial={parseConops(project.conops)}
+          writable={writable}
+          formatDocId={formatDoc?.id}
+          artifactCounts={artifactSummary.counts}
+        />
+        <div className="space-y-6">
+          <AiDraftsPanel
+            projectId={project.id}
+            drafts={pendingDrafts.map((d) => ({
+              id: d.id,
+              artifactType: d.artifactType,
+              title: d.title,
+              payload: d.payload,
+              source: d.source,
+            }))}
+            writable={writable}
+          />
+          <ArtifactsIo projectId={project.id} writable={writable} />
+        </div>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="p-5 lg:col-span-2">

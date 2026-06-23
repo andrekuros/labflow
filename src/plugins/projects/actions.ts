@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { canWriteProject } from "@/lib/rbac";
 import { emit } from "@/lib/events";
 import { getPluginSettings } from "@/plugins/registry";
+import { applyProjectTemplate, type ProjectTemplateKey } from "@/plugins/projects/templates";
 
 export async function createProject(input: { key: string; name: string; description?: string; color?: string }) {
   const session = await getSession();
@@ -30,68 +31,15 @@ export async function createProject(input: { key: string; name: string; descript
 }
 
 export async function createProjectFromTemplate(
-  template: "se" | "blank",
+  template: ProjectTemplateKey,
   input: { key: string; name: string; description?: string; color?: string },
 ) {
   if (template === "blank") return createProject(input);
 
   const project = await createProject(input);
-
-  const wbs = [
-    { code: "1", name: "Concepcao" },
-    { code: "2", name: "Requisitos" },
-    { code: "3", name: "Design" },
-    { code: "4", name: "Implementacao" },
-    { code: "5", name: "Integracao" },
-    { code: "6", name: "Verificacao e validacao" },
-  ];
-
-  for (const [i, w] of wbs.entries()) {
-    await prisma.workPackage.create({
-      data: { projectId: project.id, code: w.code, name: w.name, order: i },
-    });
-  }
-
-  const gates = [
-    { gate: "SRR", name: "System Requirements Review", kind: "verification" },
-    { gate: "PDR", name: "Preliminary Design Review", kind: "verification" },
-    { gate: "CDR", name: "Critical Design Review", kind: "verification" },
-    { gate: "TRR", name: "Test Readiness Review", kind: "verification" },
-    { gate: "FRR", name: "Flight/Field Readiness Review", kind: "release" },
-  ];
-
-  for (const g of gates) {
-    await prisma.milestone.create({
-      data: { projectId: project.id, name: g.name, gate: g.gate, kind: g.kind, status: "upcoming" },
-    });
-  }
-
-  await prisma.systemElement.create({
-    data: { projectId: project.id, name: input.name, kind: "system", description: "System of Interest" },
-  });
-
-  await prisma.requirement.createMany({
-    data: [
-      {
-        projectId: project.id,
-        code: "SN-001",
-        title: "Necessidade do stakeholder (exemplo)",
-        level: "stakeholder",
-        kind: "goal",
-        status: "proposed",
-      },
-      {
-        projectId: project.id,
-        code: "SYS-001",
-        title: "Requisito de sistema (exemplo)",
-        level: "system",
-        kind: "functional",
-        status: "proposed",
-      },
-    ],
-  });
-
+  await applyProjectTemplate(project.id, template, input);
   revalidatePath("/projects");
+  revalidatePath(`/projects/${project.id}`);
   return project;
 }
 
