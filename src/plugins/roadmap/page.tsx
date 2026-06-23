@@ -6,6 +6,7 @@ import { Card, Badge, PageHeader, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { NewMilestoneButton, MilestoneStatusControl, MS_KIND } from "@/components/planning/planning-forms";
 import { Flag, Timer } from "lucide-react";
+import { SE_GATES } from "@/lib/se/constants";
 
 export default async function RoadmapPage() {
   const session = await requireUser();
@@ -16,24 +17,31 @@ export default async function RoadmapPage() {
   const settings = getPluginSettings("roadmap");
   const showSprints = settings.showSprints !== false;
 
-  const [projects, milestones, sprints, canWrite] = await Promise.all([
+  const [projects, milestones, sprints, canWrite, reqStats] = await Promise.all([
     prisma.project.findMany({ where: { id: { in: ids } }, orderBy: { name: "asc" } }),
     prisma.milestone.findMany({ where: { projectId: { in: ids } }, include: { project: true } }),
     showSprints
       ? prisma.sprint.findMany({ where: { projectId: { in: ids }, endDate: { not: null } }, include: { project: true } })
       : Promise.resolve([]),
     writableMap(session, ids),
+    prisma.requirement.groupBy({ by: ["projectId", "status"], where: { projectId: { in: ids } }, _count: true }),
   ]);
 
   type Item = {
     id: string; kind: "milestone" | "sprint"; date: Date; name: string;
-    project: { key: string; color: string }; projectId: string; subkind?: string; status?: string;
+    project: { key: string; color: string }; projectId: string; subkind?: string; status?: string; gate?: string | null;
   };
+
+  function gateReadiness(projectId: string) {
+    const approved = reqStats.filter((r) => r.projectId === projectId && r.status === "approved").reduce((s, r) => s + r._count, 0);
+    const total = reqStats.filter((r) => r.projectId === projectId).reduce((s, r) => s + r._count, 0);
+    return { approved, total };
+  }
 
   const items: Item[] = [
     ...milestones.filter((m) => m.date).map((m) => ({
       id: m.id, kind: "milestone" as const, date: m.date as Date, name: m.name,
-      project: { key: m.project.key, color: m.project.color }, projectId: m.projectId, subkind: m.kind, status: m.status,
+      project: { key: m.project.key, color: m.project.color }, projectId: m.projectId, subkind: m.kind, status: m.status, gate: m.gate,
     })),
     ...sprints.map((s) => ({
       id: s.id, kind: "sprint" as const, date: s.endDate as Date, name: `Fim: ${s.name}`,
@@ -72,11 +80,13 @@ export default async function RoadmapPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <Badge color={it.project.color}>{it.project.key}</Badge>
+                        {it.gate && SE_GATES[it.gate] && <Badge color={SE_GATES[it.gate].color}>{it.gate}</Badge>}
                         {ms && <Badge color={ms.color}>{ms.label}</Badge>}
                         {it.kind === "sprint" && <Badge color="#0ea5e9">Sprint</Badge>}
                       </div>
                       <p className="mt-1 font-medium">{it.name}</p>
                       <p className="text-xs text-muted">{formatDate(it.date)}</p>
+                      {it.gate && (() => { const g = gateReadiness(it.projectId); return g.total > 0 ? <p className="mt-1 text-xs text-muted">Prontidao: {g.approved}/{g.total} requisitos aprovados</p> : null; })()}
                     </div>
                     {it.kind === "milestone" && (
                       <MilestoneStatusControl id={it.id} status={it.status ?? "upcoming"} disabled={!canWrite[it.projectId]} />

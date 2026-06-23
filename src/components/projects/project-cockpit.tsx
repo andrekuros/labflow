@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, Badge } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
-import { BookOpen, MessageSquare, PackageCheck, ListTodo, Zap } from "lucide-react";
+import { BookOpen, MessageSquare, PackageCheck, ListTodo, Zap, Cpu, ShieldCheck } from "lucide-react";
 
 type CockpitProps = {
   project: { id: string; key: string; name: string; color: string };
@@ -11,6 +11,10 @@ type CockpitProps = {
   articles: { id: string; title: string; externalSource: string | null; updatedAt: string }[];
   threads: { id: string; title: string; status: string; updatedAt: string }[];
   linkCount: number;
+  seMaturity?: { approved: number; total: number };
+  vvPassed?: number;
+  vvTotal?: number;
+  systemElementCount?: number;
 };
 
 const DELIV_STATUS: Record<string, string> = {
@@ -27,6 +31,10 @@ export function ProjectCockpit({
   articles,
   threads,
   linkCount,
+  seMaturity,
+  vvPassed = 0,
+  vvTotal = 0,
+  systemElementCount = 0,
 }: CockpitProps) {
   return (
     <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -110,6 +118,29 @@ export function ProjectCockpit({
         <Link href="/knowledge" className="mt-2 inline-block text-xs text-brand hover:underline">
           Base de conhecimento
         </Link>
+      </Card>
+
+      <Card className="p-4">
+        <div className="mb-2 flex items-center gap-2 text-muted">
+          <Cpu size={15} />
+          <span className="text-xs font-semibold uppercase tracking-wide">Modelo SE</span>
+        </div>
+        <p className="text-2xl font-semibold">{systemElementCount}</p>
+        <p className="text-xs text-muted">elementos do sistema</p>
+        {seMaturity && (
+          <p className="mt-1 text-xs text-muted">Maturidade: {seMaturity.approved}/{seMaturity.total} requisitos aprovados</p>
+        )}
+        <Link href="/system-model" className="mt-2 inline-block text-xs text-brand hover:underline">Abrir modelo</Link>
+      </Card>
+
+      <Card className="p-4">
+        <div className="mb-2 flex items-center gap-2 text-muted">
+          <ShieldCheck size={15} />
+          <span className="text-xs font-semibold uppercase tracking-wide">V&V</span>
+        </div>
+        <p className="text-2xl font-semibold">{vvPassed}/{vvTotal}</p>
+        <p className="text-xs text-muted">casos aprovados</p>
+        <Link href="/verification" className="mt-2 inline-block text-xs text-brand hover:underline">Matriz V&V</Link>
       </Card>
 
       {threads.length > 0 && (

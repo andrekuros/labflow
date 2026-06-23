@@ -14,6 +14,8 @@ export const REQ_STATUS: Record<string, { label: string; color: string }> = {
   verified: { label: "Verificado", color: "#22c55e" },
 };
 
+import { REQ_LEVEL, SE_GATES } from "@/lib/se/constants";
+
 export const REQ_KIND: Record<string, string> = {
   goal: "Meta", functional: "Funcional", nonfunctional: "Nao-funcional", constraint: "Restricao",
 };
@@ -39,9 +41,11 @@ function Modal({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-export function NewRequirementButton({ projects, activities, defaultProjectId }: {
+export function NewRequirementButton({ projects, activities, systemElements = [], requirements = [], defaultProjectId }: {
   projects: { id: string; key: string; name: string }[];
   activities: { id: string; name: string; code: string | null; projectId: string }[];
+  systemElements?: { id: string; name: string; projectId: string }[];
+  requirements?: { id: string; title: string; code: string | null; projectId: string; level: string }[];
   defaultProjectId?: string;
 }) {
   const router = useRouter();
@@ -55,10 +59,15 @@ export function NewRequirementButton({ projects, activities, defaultProjectId }:
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [kind, setKind] = useState("goal");
+  const [level, setLevel] = useState("system");
+  const [parentId, setParentId] = useState("");
+  const [allocatedToId, setAllocatedToId] = useState("");
   const [priority, setPriority] = useState("medium");
   const [actIds, setActIds] = useState<string[]>([]);
   const [pending, start] = useTransition();
   const acts = activities.filter((a) => a.projectId === projectId);
+  const elems = systemElements.filter((e) => e.projectId === projectId);
+  const parents = requirements.filter((r) => r.projectId === projectId);
   if (projects.length === 0) return null;
 
   function openDialog() {
@@ -85,9 +94,14 @@ export function NewRequirementButton({ projects, activities, defaultProjectId }:
             </div>
             <div><Label>Descricao</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} /></div>
             <div className="grid grid-cols-2 gap-3">
+              <div><Label>Nivel SE</Label><Select value={level} onChange={(e) => setLevel(e.target.value)} className="w-full">{Object.entries(REQ_LEVEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></div>
               <div><Label>Tipo</Label><Select value={kind} onChange={(e) => setKind(e.target.value)} className="w-full">{Object.entries(REQ_KIND).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select></div>
-              <div><Label>Prioridade</Label><Select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full"><option value="low">Baixa</option><option value="medium">Media</option><option value="high">Alta</option></Select></div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Requisito pai</Label><Select value={parentId} onChange={(e) => setParentId(e.target.value)} className="w-full"><option value="">(nenhum)</option>{parents.map((p) => <option key={p.id} value={p.id}>{p.code ?? ""} {p.title}</option>)}</Select></div>
+              <div><Label>Alocado em</Label><Select value={allocatedToId} onChange={(e) => setAllocatedToId(e.target.value)} className="w-full"><option value="">(nenhum)</option>{elems.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}</Select></div>
+            </div>
+            <div><Label>Prioridade</Label><Select value={priority} onChange={(e) => setPriority(e.target.value)} className="w-full"><option value="low">Baixa</option><option value="medium">Media</option><option value="high">Alta</option></Select></div>
             {acts.length > 0 && (
               <div><Label>Atividades relacionadas</Label>
                 <div className="flex flex-wrap gap-2">
@@ -102,7 +116,7 @@ export function NewRequirementButton({ projects, activities, defaultProjectId }:
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
               <Button disabled={pending || !title} onClick={() => start(async () => {
-                await createRequirement({ projectId, title, code, description, kind, priority, activityIds: actIds });
+                await createRequirement({ projectId, title, code, description, kind, priority, level, parentId: parentId || null, allocatedToId: allocatedToId || null, activityIds: actIds });
                 setOpen(false); setTitle(""); setCode(""); setDescription(""); setActIds([]); router.refresh();
               })}>Criar</Button>
             </div>

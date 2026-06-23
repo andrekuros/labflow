@@ -9,6 +9,8 @@ import {
   REQ_KIND,
 } from "@/components/planning/planning-forms";
 import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
+import Link from "next/link";
+import { REQ_LEVEL } from "@/lib/se/constants";
 
 type Project = { id: string; key: string; name: string; color: string };
 type Activity = { id: string; name: string; code: string | null; projectId: string };
@@ -18,12 +20,16 @@ type Requirement = {
   title: string;
   description: string | null;
   kind: string;
+  level: string;
   status: string;
   priority: string;
   projectId: string;
+  parentId?: string | null;
   project: Project;
   activities: { id: string; name: string; code: string | null }[];
   deliverables: { id: string; name: string }[];
+  allocatedTo?: { id: string; name: string } | null;
+  verificationCases?: { id: string; name: string; status: string }[];
 };
 
 function RequirementTable({
@@ -47,7 +53,9 @@ function RequirementTable({
             {showProject && <th className="px-4 py-2 font-medium">Projeto</th>}
             <th className="px-4 py-2 font-medium">Codigo</th>
             <th className="px-4 py-2 font-medium">Requisito</th>
+            <th className="px-4 py-2 font-medium">Nivel</th>
             <th className="px-4 py-2 font-medium">Tipo</th>
+            <th className="px-4 py-2 font-medium">Alocado</th>
             <th className="px-4 py-2 font-medium">Atividades</th>
             <th className="px-4 py-2 font-medium">Entregaveis</th>
             <th className="px-4 py-2 font-medium">Docs</th>
@@ -69,8 +77,12 @@ function RequirementTable({
                 {r.description && <p className="mt-0.5 text-xs text-muted">{r.description}</p>}
               </td>
               <td className="px-4 py-3">
+                <Badge className="bg-surface2 text-muted">{REQ_LEVEL[r.level] ?? r.level}</Badge>
+              </td>
+              <td className="px-4 py-3">
                 <Badge className="bg-surface2 text-muted">{REQ_KIND[r.kind] ?? r.kind}</Badge>
               </td>
+              <td className="px-4 py-3 text-xs text-muted">{r.allocatedTo?.name ?? "—"}</td>
               <td className="px-4 py-3">
                 <div className="flex flex-col gap-1">
                   {r.activities.length === 0 && (
@@ -127,18 +139,27 @@ export function RequirementsView({
   projects,
   requirements,
   activities,
+  systemElements = [],
   canWrite,
+  showMatrixLink,
 }: {
   projects: Project[];
   requirements: Requirement[];
   activities: Activity[];
+  systemElements?: { id: string; name: string; projectId: string }[];
   canWrite: Record<string, boolean>;
+  showMatrixLink?: boolean;
 }) {
   const [projectId, setProjectId] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
 
   const filtered = useMemo(
-    () => (projectId ? requirements.filter((r) => r.projectId === projectId) : requirements),
-    [requirements, projectId],
+    () => requirements.filter((r) => {
+      if (projectId && r.projectId !== projectId) return false;
+      if (levelFilter && r.level !== levelFilter) return false;
+      return true;
+    }),
+    [requirements, projectId, levelFilter],
   );
 
   const grouped = useMemo(() => {
@@ -168,6 +189,13 @@ export function RequirementsView({
               <option key={p.id} value={p.id}>{p.key} — {p.name}</option>
             ))}
           </Select>
+          <Select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)} className="min-w-[160px]">
+            <option value="">Todos os niveis</option>
+            {Object.entries(REQ_LEVEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </Select>
+          {showMatrixLink && (
+            <Link href="/requirements?view=matrix" className="text-sm text-brand hover:underline">Matriz de rastreabilidade</Link>
+          )}
           <span className="text-sm text-muted">
             {filtered.length} requisito{filtered.length !== 1 ? "s" : ""}
             {selectedProject ? ` em ${selectedProject.key}` : ` em ${projects.length} projeto(s)`}
@@ -177,6 +205,8 @@ export function RequirementsView({
           <NewRequirementButton
             projects={writableProjects.map((p) => ({ id: p.id, key: p.key, name: p.name }))}
             activities={activities}
+            systemElements={systemElements}
+            requirements={requirements}
             defaultProjectId={projectId || undefined}
           />
         )}
@@ -193,6 +223,8 @@ export function RequirementsView({
               <NewRequirementButton
                 projects={writableProjects.map((p) => ({ id: p.id, key: p.key, name: p.name }))}
                 activities={activities}
+                systemElements={systemElements}
+                requirements={requirements}
                 defaultProjectId={projectId}
               />
             ) : undefined

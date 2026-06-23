@@ -32,6 +32,11 @@ import { handlers as boardApi } from "@/plugins/board/api";
 import { assistantManifest } from "@/plugins/assistant/manifest";
 import { handlers as assistantApi } from "@/plugins/assistant/api";
 
+import { systemModelManifest } from "@/plugins/system-model/manifest";
+import { handlers as systemModelApi } from "@/plugins/system-model/api";
+import { verificationManifest } from "@/plugins/verification/manifest";
+import { handlers as verificationApi } from "@/plugins/verification/api";
+
 const BUILTIN_PLUGINS = [
   projectsManifest,
   boardManifest,
@@ -39,6 +44,8 @@ const BUILTIN_PLUGINS = [
   roadmapManifest,
   deliverablesManifest,
   requirementsManifest,
+  systemModelManifest,
+  verificationManifest,
   knowledgeManifest,
   forumManifest,
   assistantManifest,
@@ -50,6 +57,8 @@ const API_REGISTRATIONS: [string, typeof teamApi][] = [
   ["team", teamApi],
   ["sprints", sprintsApi],
   ["requirements", requirementsApi],
+  ["system-model", systemModelApi],
+  ["verification", verificationApi],
   ["deliverables", deliverablesApi],
   ["roadmap", roadmapApi],
   ["knowledge", knowledgeApi],

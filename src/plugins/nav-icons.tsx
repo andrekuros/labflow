@@ -15,6 +15,8 @@ import {
   Users,
   Settings,
   FlaskConical,
+  Cpu,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +35,8 @@ const ICONS: Record<string, LucideIcon> = {
   Users,
   Settings,
   FlaskConical,
+  Cpu,
+  ShieldCheck,
 };
 
 export function getNavIcon(name: string): LucideIcon {

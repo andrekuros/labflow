@@ -20,6 +20,10 @@ export async function createRequirement(input: {
   description?: string;
   kind?: string;
   priority?: string;
+  level?: string;
+  parentId?: string | null;
+  allocatedToId?: string | null;
+  source?: string;
   activityIds?: string[];
 }) {
   const session = await authorize(input.projectId);
@@ -31,6 +35,10 @@ export async function createRequirement(input: {
       description: input.description || null,
       kind: input.kind ?? "goal",
       priority: input.priority ?? "medium",
+      level: input.level ?? "system",
+      parentId: input.parentId || null,
+      allocatedToId: input.allocatedToId || null,
+      source: input.source || null,
       activities: input.activityIds?.length ? { connect: input.activityIds.map((id) => ({ id })) } : undefined,
     },
   });
@@ -47,4 +55,13 @@ export async function setRequirementStatus(id: string, status: string) {
   if (!(await canWriteProject(session, r.projectId))) throw new Error("Sem permissao");
   await prisma.requirement.update({ where: { id }, data: { status } });
   revalidatePath("/requirements");
+}
+
+export async function getRequirementTree(projectId: string) {
+  const rows = await prisma.requirement.findMany({
+    where: { projectId },
+    include: { children: true, allocatedTo: true },
+    orderBy: { code: "asc" },
+  });
+  return rows.filter((r) => !r.parentId);
 }

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label } from "@/components/ui";
-import { createProject, createWorkPackage, createLabel, addMember } from "@/plugins/projects/actions";
+import { createProject, createProjectFromTemplate, createWorkPackage, createLabel, addMember } from "@/plugins/projects/actions";
 import { createSprint } from "@/plugins/sprints/actions";
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -28,6 +28,7 @@ export function NewProjectButton() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [color, setColor] = useState("#6366f1");
+  const [template, setTemplate] = useState<"blank" | "se">("blank");
   const [pending, start] = useTransition();
 
   return (
@@ -42,9 +43,16 @@ export function NewProjectButton() {
             </div>
             <div><Label>Descricao</Label><Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} /></div>
             <div><Label>Cor</Label><input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="h-9 w-16 rounded-lg border border-border bg-surface2" /></div>
+            <div>
+              <Label>Template</Label>
+              <Select value={template} onChange={(e) => setTemplate(e.target.value as "blank" | "se")} className="w-full">
+                <option value="blank">Projeto em branco</option>
+                <option value="se">Engenharia de Sistemas (WBS + gates + SoI)</option>
+              </Select>
+            </div>
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-              <Button disabled={pending || !key || !name} onClick={() => start(async () => { await createProject({ key, name, description, color }); setOpen(false); router.refresh(); })}>Criar</Button>
+              <Button disabled={pending || !key || !name} onClick={() => start(async () => { await createProjectFromTemplate(template, { key, name, description, color }); setOpen(false); router.refresh(); })}>Criar</Button>
             </div>
           </div>
         </Modal>

@@ -80,6 +80,9 @@ model Project {
   channels     Channel[]
   articles     KnowledgeArticle[]
   pluginSettings PluginProjectSettings[]
+  systemElements SystemElement[]
+  interfaces   Interface[]
+  verificationCases VerificationCase[]
 }
 
 // Work package / activity (WBS node, hierarchical -> systems engineering).
@@ -184,20 +187,77 @@ model Requirement {
   id          String   @id @default(cuid())
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectId   String
-  code        String? // e.g. "REQ-001"
+  parent      Requirement? @relation("ReqHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  parentId    String?
+  children    Requirement[] @relation("ReqHierarchy")
+  allocatedTo SystemElement? @relation(fields: [allocatedToId], references: [id], onDelete: SetNull)
+  allocatedToId String?
+  code        String?
   title       String
   description String?
-  // kind: goal | functional | nonfunctional | constraint
+  level       String   @default("system")
+  source      String?
   kind        String   @default("goal")
-  // priority: low | medium | high
   priority    String   @default("medium")
-  // status: proposed | approved | implemented | verified
   status      String   @default("proposed")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   deliverables Deliverable[] @relation("RequirementDeliverables")
   activities   WorkPackage[] @relation("RequirementActivities")
+  verificationCases VerificationCase[]
+}
+
+model SystemElement {
+  id          String   @id @default(cuid())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  parent      SystemElement? @relation("SysHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  parentId    String?
+  children    SystemElement[] @relation("SysHierarchy")
+  name        String
+  description String?
+  kind        String   @default("subsystem")
+  diagram     String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  requirements Requirement[]
+  interfacesFrom Interface[] @relation("InterfaceFrom")
+  interfacesTo   Interface[] @relation("InterfaceTo")
+}
+
+model Interface {
+  id          String   @id @default(cuid())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  from        SystemElement @relation("InterfaceFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  fromId      String
+  to          SystemElement @relation("InterfaceTo", fields: [toId], references: [id], onDelete: Cascade)
+  toId        String
+  name        String
+  description String?
+  kind        String   @default("data")
+  protocol    String?
+  createdAt   DateTime @default(now())
+}
+
+model VerificationCase {
+  id            String   @id @default(cuid())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId     String
+  requirement   Requirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  requirementId String
+  milestone     Milestone? @relation(fields: [milestoneId], references: [id], onDelete: SetNull)
+  milestoneId   String?
+  name          String
+  method        String   @default("test")
+  status        String   @default("planned")
+  result        String?
+  evidence      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Milestone {
@@ -206,12 +266,13 @@ model Milestone {
   projectId   String
   name        String
   description String?
-  // kind: milestone | verification | validation | release
   kind        String   @default("milestone")
+  gate        String?
   date        DateTime?
-  // status: upcoming | reached | missed
   status      String   @default("upcoming")
   createdAt   DateTime @default(now())
+
+  verificationCases VerificationCase[]
 }
 
 // ---------------------------------------------------------------------------

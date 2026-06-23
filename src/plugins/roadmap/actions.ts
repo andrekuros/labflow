@@ -17,6 +17,7 @@ export async function createMilestone(input: {
   name: string;
   description?: string;
   kind?: string;
+  gate?: string | null;
   date?: string | null;
 }) {
   await authorize(input.projectId);
@@ -26,6 +27,7 @@ export async function createMilestone(input: {
       name: input.name,
       description: input.description || null,
       kind: input.kind ?? "milestone",
+      gate: input.gate || null,
       date: input.date ? new Date(input.date) : null,
     },
   });

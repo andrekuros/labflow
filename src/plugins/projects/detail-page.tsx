@@ -28,7 +28,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   });
   if (!project) notFound();
 
-  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds] = await Promise.all([
+  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount] = await Promise.all([
     prisma.task.count({ where: { projectId: id, status: { not: "done" } } }),
     prisma.deliverable.findMany({
       where: { projectId: id, status: { notIn: ["accepted", "rejected"] } },
@@ -44,6 +44,11 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     prisma.task.findMany({ where: { projectId: id }, select: { id: true } }),
     prisma.deliverable.findMany({ where: { projectId: id }, select: { id: true } }),
     prisma.requirement.findMany({ where: { projectId: id }, select: { id: true } }),
+    prisma.requirement.count({ where: { projectId: id, status: "approved" } }),
+    prisma.requirement.count({ where: { projectId: id } }),
+    prisma.verificationCase.count({ where: { projectId: id, status: "passed" } }),
+    prisma.verificationCase.count({ where: { projectId: id } }),
+    prisma.systemElement.count({ where: { projectId: id } }),
   ]);
 
   const linkCount = await prisma.knowledgeLink.count({
@@ -136,6 +141,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           updatedAt: t.updatedAt.toISOString(),
         }))}
         linkCount={linkCount}
+        seMaturity={{ approved: reqApproved, total: reqTotal }}
+        vvPassed={vvPassed}
+        vvTotal={vvTotal}
+        systemElementCount={systemElementCount}
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
