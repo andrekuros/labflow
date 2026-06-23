@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label } from "@/components/ui";
-import { createRequirement, setRequirementStatus, createMilestone, setMilestoneStatus } from "@/app/actions/planning";
+import { createRequirement, setRequirementStatus } from "@/plugins/requirements/actions";
+import { createMilestone, setMilestoneStatus } from "@/plugins/roadmap/actions";
 
 export const REQ_STATUS: Record<string, { label: string; color: string }> = {
   proposed: { label: "Proposto", color: "#64748b" },

@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { X, Trash2 } from "lucide-react";
 import { Button, Input, Textarea, Select, Label, Badge, Avatar } from "@/components/ui";
-import { createTask, updateTask, deleteTask } from "@/app/actions/tasks";
+import { createTask, updateTask, deleteTask } from "@/plugins/board/actions";
 import { COLUMNS, PRIORITIES, type BoardTask, type Person, type LabelItem, type SprintItem, type ProjectItem } from "@/components/board/types";
 import { AddCategoryDialog } from "@/components/board/add-category-dialog";
+import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
 
 export function TaskDialog({
   task,
@@ -211,6 +212,15 @@ export function TaskDialog({
               </div>
             )}
           </div>
+
+          {editing && task && (
+            <KnowledgeLinksPanel
+              targetType="task"
+              targetId={task.id}
+              projectId={projectId}
+              canEdit={writable}
+            />
+          )}
 
           {!writable && (
             <p className="text-xs text-amber-400">Voce tem acesso somente leitura neste projeto.</p>

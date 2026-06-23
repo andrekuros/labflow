@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Select, Label } from "@/components/ui";
-import { createLabel } from "@/app/actions/projects";
+import { createLabel } from "@/plugins/projects/actions";
 import type { ProjectItem } from "@/components/board/types";
 
 const COLORS = ["#64748b", "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#a855f7", "#ec4899", "#0ea5e9"];

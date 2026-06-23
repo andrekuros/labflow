@@ -5,17 +5,21 @@ import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { canWriteProject } from "@/lib/rbac";
 import { emit } from "@/lib/events";
+import { getPluginSettings } from "@/plugins/registry";
 
 export async function createProject(input: { key: string; name: string; description?: string; color?: string }) {
   const session = await getSession();
   if (!session) throw new Error("Nao autenticado");
 
+  const settings = getPluginSettings("projects");
+  const maxKeyLength = Number(settings.maxKeyLength ?? 8);
+
   const project = await prisma.project.create({
     data: {
-      key: input.key.toUpperCase().slice(0, 8),
+      key: input.key.toUpperCase().slice(0, maxKeyLength),
       name: input.name,
       description: input.description || null,
-      color: input.color || "#6366f1",
+      color: input.color || String(settings.defaultColor ?? "#6366f1"),
       memberships: { create: { userId: session.id, role: "lead" } },
     },
   });
@@ -70,36 +74,4 @@ export async function createWorkPackage(input: {
     },
   });
   revalidatePath(`/projects/${input.projectId}`);
-}
-
-export async function createSprint(input: {
-  projectId: string;
-  name: string;
-  goal?: string;
-  startDate?: string | null;
-  endDate?: string | null;
-}) {
-  const session = await getSession();
-  if (!session) throw new Error("Nao autenticado");
-  if (!(await canWriteProject(session, input.projectId))) throw new Error("Sem permissao");
-  await prisma.sprint.create({
-    data: {
-      projectId: input.projectId,
-      name: input.name,
-      goal: input.goal || null,
-      startDate: input.startDate ? new Date(input.startDate) : null,
-      endDate: input.endDate ? new Date(input.endDate) : null,
-    },
-  });
-  revalidatePath("/sprints");
-}
-
-export async function setSprintStatus(sprintId: string, status: string) {
-  const session = await getSession();
-  if (!session) throw new Error("Nao autenticado");
-  const sprint = await prisma.sprint.findUnique({ where: { id: sprintId } });
-  if (!sprint) return;
-  if (!(await canWriteProject(session, sprint.projectId))) throw new Error("Sem permissao");
-  await prisma.sprint.update({ where: { id: sprintId }, data: { status } });
-  revalidatePath("/sprints");
 }

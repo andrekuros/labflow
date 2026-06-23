@@ -4,13 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label } from "@/components/ui";
-import {
-  createProject,
-  createWorkPackage,
-  createLabel,
-  addMember,
-  createSprint,
-} from "@/app/actions/projects";
+import { createProject, createWorkPackage, createLabel, addMember } from "@/plugins/projects/actions";
+import { createSprint } from "@/plugins/sprints/actions";
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (

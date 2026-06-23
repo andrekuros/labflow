@@ -16,7 +16,7 @@ import {
 import { Plus, Search, CalendarClock } from "lucide-react";
 import { Button, Select, Input, Badge, Avatar, PageHeader } from "@/components/ui";
 import { formatDate, daysUntil, cn } from "@/lib/utils";
-import { moveTask } from "@/app/actions/tasks";
+import { moveTask } from "@/plugins/board/actions";
 import { TaskDialog } from "@/components/board/task-dialog";
 import { AddCategoryDialog } from "@/components/board/add-category-dialog";
 import {

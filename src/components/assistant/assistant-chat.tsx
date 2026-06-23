@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Send, Bot, User as UserIcon, FileText } from "lucide-react";
 import { Button, Card, Textarea, Select, Badge } from "@/components/ui";
-import { askAssistant } from "@/app/actions/assistant";
+import { askAssistant } from "@/plugins/assistant/actions";
 import type { AgentSource } from "@/lib/ai/agent";
 
 type Msg = { role: "user" | "assistant"; content: string; sources?: AgentSource[] };

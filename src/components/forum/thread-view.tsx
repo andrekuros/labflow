@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Send } from "lucide-react";
 import { Button, Textarea, Avatar } from "@/components/ui";
-import { createPost, fetchPosts } from "@/app/actions/forum";
+import { createPost, fetchPosts } from "@/plugins/forum/actions";
 
 type Post = { id: string; content: string; createdAt: string; authorName: string; authorColor: string };
 

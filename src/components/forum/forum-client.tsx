@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X, MessageSquarePlus } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label } from "@/components/ui";
-import { createChannel, createThread } from "@/app/actions/forum";
+import { createChannel, createThread } from "@/plugins/forum/actions";
 
 export function NewChannelButton({ projects }: { projects: { id: string; key: string; name: string }[] }) {
   const router = useRouter();

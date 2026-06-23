@@ -1,14 +1,25 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
+import { bootstrapAsync } from "@/server/bootstrap";
+import { getNavItems } from "@/plugins/registry";
+import { unreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/sidebar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
-  const user = await prisma.user.findUnique({ where: { id: session.id } });
+  await bootstrapAsync();
+
+  const [user, navItems, unread] = await Promise.all([
+    prisma.user.findUnique({ where: { id: session.id } }),
+    getNavItems(),
+    unreadCount(session.id),
+  ]);
 
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
+        navItems={navItems}
+        unreadNotifications={unread}
         user={{
           name: user?.name ?? session.name,
           role: user?.role ?? session.role,

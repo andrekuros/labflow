@@ -1,25 +1,23 @@
 import "server-only";
 import { localEmbed } from "@/lib/ai/embeddings";
+import { getAiConfig } from "@/lib/ai/config";
 
 /**
  * LLM provider abstraction. Supports OpenAI-compatible APIs and Ollama; falls
- * back to fully-offline behavior when AI_PROVIDER is "none" (default), so the
- * platform always runs without external dependencies.
+ * back to fully-offline behavior when provider is "none".
+ * Configuration is read from /settings (assistant plugin) with .env fallback.
  */
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
-const provider = (process.env.AI_PROVIDER ?? "none").toLowerCase();
-const apiKey = process.env.AI_API_KEY ?? "";
-const baseUrl = process.env.AI_BASE_URL ?? "";
-const chatModel = process.env.AI_CHAT_MODEL ?? "gpt-4o-mini";
-const embeddingModel = process.env.AI_EMBEDDING_MODEL ?? "text-embedding-3-small";
-
-export function aiEnabled() {
-  return provider !== "none";
+export async function aiEnabled() {
+  const config = await getAiConfig();
+  return config.provider !== "none";
 }
 
 export async function embed(text: string): Promise<number[]> {
+  const { provider, apiKey, baseUrl, embeddingModel } = await getAiConfig();
+
   if (provider === "openai" && apiKey) {
     try {
       const url = `${baseUrl || "https://api.openai.com/v1"}/embeddings`;
@@ -42,6 +40,8 @@ export async function embed(text: string): Promise<number[]> {
 }
 
 export async function chat(messages: ChatMessage[]): Promise<string> {
+  const { provider, apiKey, baseUrl, chatModel } = await getAiConfig();
+
   if (provider === "openai" && apiKey) {
     try {
       const url = `${baseUrl || "https://api.openai.com/v1"}/chat/completions`;
@@ -60,6 +60,7 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
       console.error("[ai] chat failed, using offline fallback", err);
     }
   }
+
   if (provider === "ollama") {
     try {
       const url = `${baseUrl || "http://localhost:11434"}/api/chat`;
@@ -75,14 +76,10 @@ export async function chat(messages: ChatMessage[]): Promise<string> {
       console.error("[ai] ollama chat failed, using offline fallback", err);
     }
   }
+
   return offlineAnswer(messages);
 }
 
-/**
- * Offline heuristic: extractive answer built from the retrieved context that
- * the RAG layer injects as a system message. Keeps the assistant useful with
- * no API key.
- */
 function offlineAnswer(messages: ChatMessage[]): string {
   const question = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const context = messages.find((m) => m.role === "system" && m.content.includes("CONTEXTO"))?.content ?? "";
@@ -92,13 +89,13 @@ function offlineAnswer(messages: ChatMessage[]): string {
     .slice(0, 4);
 
   if (snippets.length === 0) {
-    return `Nao ha provedor de IA configurado e nao encontrei contexto relevante para: "${question}". Configure AI_PROVIDER/AI_API_KEY no .env para respostas geradas por LLM.`;
+    return `Nao ha provedor de IA configurado e nao encontrei contexto relevante para: "${question}". Configure o provedor em Configuracoes > Assistente de IA.`;
   }
   return [
     `Resposta baseada no conhecimento acumulado (modo offline, sem LLM):`,
     "",
     ...snippets,
     "",
-    `Para respostas mais ricas, configure um provedor de IA no arquivo .env.`,
+    `Para respostas mais ricas, configure um provedor de IA em Configuracoes.`,
   ].join("\n");
 }

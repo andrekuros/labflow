@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Save, Pencil } from "lucide-react";
 import { Button, Input, Textarea, Badge } from "@/components/ui";
-import { updateArticle } from "@/app/actions/knowledge";
+import { updateArticle } from "@/plugins/knowledge/actions";
 import { formatDate } from "@/lib/utils";
 
 export function ArticleEditor({

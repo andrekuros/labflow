@@ -3,7 +3,7 @@
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Select } from "@/components/ui";
-import { setSprintStatus } from "@/app/actions/projects";
+import { setSprintStatus } from "@/plugins/sprints/actions";
 
 export function SprintStatusControl({ sprintId, status, disabled }: { sprintId: string; status: string; disabled?: boolean }) {
   const router = useRouter();

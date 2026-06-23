@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label } from "@/components/ui";
-import { createDeliverable, setDeliverableStatus } from "@/app/actions/deliverables";
+import { createDeliverable, setDeliverableStatus } from "@/plugins/deliverables/actions";
 
 export const DELIVERABLE_STATUS: Record<string, { label: string; color: string }> = {
   pending: { label: "Pendente", color: "#64748b" },

@@ -67,5 +67,5 @@ export async function askKnowledge(
   ];
 
   const answer = await chat(messages);
-  return { answer, sources, aiEnabled: aiEnabled() };
+  return { answer, sources, aiEnabled: await aiEnabled() };
 }

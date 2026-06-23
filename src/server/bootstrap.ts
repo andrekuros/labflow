@@ -2,6 +2,7 @@ import "server-only";
 import { on } from "@/lib/events";
 import { ingest } from "@/lib/ai/rag";
 import { registerBuiltinPlugins } from "@/plugins";
+import { initPluginRegistry } from "@/plugins/registry";
 
 /**
  * One-time server bootstrap: subscribes the knowledge/RAG ingestion pipeline to
@@ -23,6 +24,15 @@ export function bootstrap() {
   on("deliverable.created", (e) => ingestFromEvent("deliverable", e));
 
   registerBuiltinPlugins();
+}
+
+export async function bootstrapAsync() {
+  bootstrap();
+  await initPluginRegistry();
+  const { startNextcloudAutoSync } = await import("@/plugins/knowledge/auto-sync");
+  startNextcloudAutoSync();
+  const { startDueDateNotifier } = await import("@/lib/notification-scheduler");
+  startDueDateNotifier();
 }
 
 async function ingestFromEvent(

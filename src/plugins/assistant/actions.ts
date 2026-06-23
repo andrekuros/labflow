@@ -24,7 +24,6 @@ export async function askAssistant(input: { question: string; agentKey?: string 
   return result;
 }
 
-/** Run a plugin-provided AI tool by name (RBAC enforced inside each tool). */
 export async function runTool(name: string, args: Record<string, unknown>): Promise<string> {
   const session = await getSession();
   if (!session) throw new Error("Nao autenticado");

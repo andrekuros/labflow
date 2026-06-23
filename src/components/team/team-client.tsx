@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { Button, Card, Input, Select, Label } from "@/components/ui";
-import { createUser, setUserRole } from "@/app/actions/users";
+import { createUser, setUserRole } from "@/plugins/team/actions";
 
 export const ROLES: Record<string, string> = {
   admin: "Administrador", researcher: "Pesquisador", phd: "Doutorando", msc: "Mestrando", student: "Aluno",

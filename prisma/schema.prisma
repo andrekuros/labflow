@@ -37,6 +37,8 @@ model User {
   threads       Thread[]
   articles      KnowledgeArticle[]
   agentRuns     AgentRun[]
+  apiKeys       ApiKey[]
+  notifications Notification[]
 }
 
 model ProjectMembership {
@@ -77,6 +79,7 @@ model Project {
   labels       Label[]
   channels     Channel[]
   articles     KnowledgeArticle[]
+  pluginSettings PluginProjectSettings[]
 }
 
 // Work package / activity (WBS node, hierarchical -> systems engineering).
@@ -224,8 +227,17 @@ model KnowledgeArticle {
   title     String
   content   String   @default("")
   tags      String   @default("") // comma-separated
+  // Nextcloud sync (optional)
+  externalSource   String? // nextcloud
+  externalPath     String? @unique
+  externalFolder   String? // parent folder inside vault, e.g. protocolos/eeg
+  externalEtag     String?
+  externalStatus   String? // draft | active | archived (from frontmatter)
+  externalSyncedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  links KnowledgeLink[]
 }
 
 // Generic embedding store, alimentado pela ingestao de conhecimento.
@@ -241,6 +253,37 @@ model Embedding {
   createdAt  DateTime @default(now())
 
   @@index([sourceType, sourceId])
+}
+
+// Links between knowledge articles and work items (task, deliverable, requirement).
+model KnowledgeLink {
+  id         String           @id @default(cuid())
+  article    KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  articleId  String
+  // targetType: task | deliverable | requirement
+  targetType String
+  targetId   String
+  createdBy  String?
+  createdAt  DateTime         @default(now())
+
+  @@unique([articleId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  // kind: sync_error | due_task | due_deliverable | forum_reply
+  kind      String
+  title     String
+  message   String   @default("")
+  href      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -318,7 +361,30 @@ model Plugin {
   version     String   @default("0.0.0")
   enabled     Boolean  @default(true)
   config      String   @default("{}") // JSON string
+  order       Int      @default(0)
   installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  keyHash   String    @unique
+  lastUsed  DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model PluginProjectSettings {
+  id        String   @id @default(cuid())
+  pluginId  String
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  settings  String   @default("{}")
+  updatedAt DateTime @updatedAt
+
+  @@unique([pluginId, projectId])
 }
 
 model AgentConfig {

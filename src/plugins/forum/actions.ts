@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { emit } from "@/lib/events";
+import { createNotification } from "@/lib/notifications";
 
 export async function createChannel(input: { name: string; description?: string; projectId?: string | null }) {
   const session = await getSession();
@@ -35,10 +36,33 @@ export async function createThread(input: { channelId: string; title: string; co
 export async function createPost(input: { threadId: string; content: string }) {
   const session = await getSession();
   if (!session) throw new Error("Nao autenticado");
-  const thread = await prisma.thread.findUnique({ where: { id: input.threadId }, include: { channel: true } });
+  const thread = await prisma.thread.findUnique({
+    where: { id: input.threadId },
+    include: { channel: true, posts: { select: { authorId: true } } },
+  });
   const post = await prisma.post.create({ data: { threadId: input.threadId, authorId: session.id, content: input.content } });
   await prisma.thread.update({ where: { id: input.threadId }, data: { updatedAt: new Date() } });
   await emit({ type: "post.created", actorId: session.id, projectId: thread?.channel.projectId ?? null, payload: { id: post.id, content: input.content } });
+
+  if (thread) {
+    const recipientIds = new Set<string>();
+    if (thread.authorId && thread.authorId !== session.id) recipientIds.add(thread.authorId);
+    for (const p of thread.posts) {
+      if (p.authorId && p.authorId !== session.id) recipientIds.add(p.authorId);
+    }
+    await Promise.all(
+      [...recipientIds].map((userId) =>
+        createNotification({
+          userId,
+          kind: "forum_reply",
+          title: "Nova resposta no forum",
+          message: thread.title,
+          href: `/forum/${thread.id}`,
+        }),
+      ),
+    );
+  }
+
   revalidatePath(`/forum/${input.threadId}`);
   return post;
 }
@@ -50,7 +74,6 @@ export async function setThreadStatus(threadId: string, status: string) {
   revalidatePath(`/forum/${threadId}`);
 }
 
-/** Lightweight polling endpoint for near-realtime thread updates. */
 export async function fetchPosts(threadId: string) {
   const posts = await prisma.post.findMany({
     where: { threadId },

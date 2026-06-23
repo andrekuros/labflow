@@ -8,6 +8,7 @@ import {
   REQ_STATUS,
   REQ_KIND,
 } from "@/components/planning/planning-forms";
+import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
 
 type Project = { id: string; key: string; name: string; color: string };
 type Activity = { id: string; name: string; code: string | null; projectId: string };
@@ -49,6 +50,7 @@ function RequirementTable({
             <th className="px-4 py-2 font-medium">Tipo</th>
             <th className="px-4 py-2 font-medium">Atividades</th>
             <th className="px-4 py-2 font-medium">Entregaveis</th>
+            <th className="px-4 py-2 font-medium">Docs</th>
             <th className="px-4 py-2 font-medium">Status</th>
           </tr>
         </thead>
@@ -90,6 +92,15 @@ function RequirementTable({
                     <span key={d.id} className="text-xs">{d.name}</span>
                   ))}
                 </div>
+              </td>
+              <td className="px-4 py-3">
+                <KnowledgeLinksPanel
+                  targetType="requirement"
+                  targetId={r.id}
+                  projectId={r.projectId}
+                  canEdit={canWrite[r.projectId]}
+                  compact
+                />
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
