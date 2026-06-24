@@ -9,6 +9,7 @@ import { generateArtifactsFromConops, type GenerationMode } from "@/lib/ai/conop
 import { exportProjectArtifacts } from "@/lib/artifacts/export";
 import { importArtifactsAsDrafts, parseArtifactsJson } from "@/lib/artifacts/import";
 import { acceptAiDraft, createDraftsFromBundle } from "@/lib/artifacts/accept-draft";
+import { emit } from "@/lib/events";
 import { parseConops, type ConopsData, type ArtifactType } from "@/lib/artifacts/schema";
 import {
   collectExistingKeys,
@@ -30,6 +31,7 @@ export async function saveConops(projectId: string, data: ConopsData) {
     where: { id: projectId },
     data: { conops: JSON.stringify(data) },
   });
+  await emit({ type: "project.updated", projectId, payload: { id: projectId } });
   revalidatePath(`/projects/${projectId}`);
 }
 

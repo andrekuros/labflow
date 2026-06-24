@@ -21,7 +21,11 @@ export type DomainEventType =
   | "article.updated"
   | "thread.created"
   | "post.created"
-  | "project.created";
+  | "project.created"
+  | "project.updated"
+  | "user.created"
+  | "user.updated"
+  | "academic.updated";
 
 export type DomainEvent = {
   type: DomainEventType;

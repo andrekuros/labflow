@@ -4,6 +4,7 @@ import { bootstrapAsync } from "@/server/bootstrap";
 import { getNavItems } from "@/plugins/registry";
 import { unreadCount } from "@/lib/notifications";
 import { Sidebar } from "@/components/sidebar";
+import { parsePreferences } from "@/lib/user-preferences";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireUser();
@@ -15,11 +16,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     unreadCount(session.id),
   ]);
 
+  const preferences = parsePreferences(user?.preferences);
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         navItems={navItems}
         unreadNotifications={unread}
+        preferences={preferences}
         user={{
           name: user?.name ?? session.name,
           role: user?.role ?? session.role,

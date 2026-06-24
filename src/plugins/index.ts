@@ -36,6 +36,8 @@ import { systemModelManifest } from "@/plugins/system-model/manifest";
 import { handlers as systemModelApi } from "@/plugins/system-model/api";
 import { verificationManifest } from "@/plugins/verification/manifest";
 import { handlers as verificationApi } from "@/plugins/verification/api";
+import { academicManifest } from "@/plugins/academic/manifest";
+import { handlers as academicApi } from "@/plugins/academic/api";
 
 const BUILTIN_PLUGINS = [
   projectsManifest,
@@ -50,6 +52,7 @@ const BUILTIN_PLUGINS = [
   forumManifest,
   assistantManifest,
   teamManifest,
+  academicManifest,
   examplePlugin,
 ];
 
@@ -66,6 +69,7 @@ const API_REGISTRATIONS: [string, typeof teamApi][] = [
   ["projects", projectsApi],
   ["board", boardApi],
   ["assistant", assistantApi],
+  ["academic", academicApi],
 ];
 
 let loaded = false;

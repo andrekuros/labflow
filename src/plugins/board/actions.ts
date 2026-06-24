@@ -112,7 +112,7 @@ export async function updateTask(input: {
     },
   });
 
-  await emit({ type: "task.updated", actorId: session.id, projectId: task.projectId, payload: { id: task.id } });
+  await emit({ type: "task.updated", actorId: session.id, projectId: task.projectId, payload: { id: task.id, title: input.title ?? task.title, description: input.description ?? task.description } });
   revalidatePath("/board");
 }
 

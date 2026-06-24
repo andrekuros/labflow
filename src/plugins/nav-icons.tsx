@@ -17,6 +17,7 @@ import {
   FlaskConical,
   Cpu,
   ShieldCheck,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,7 @@ const ICONS: Record<string, LucideIcon> = {
   FlaskConical,
   Cpu,
   ShieldCheck,
+  GraduationCap,
 };
 
 export function getNavIcon(name: string): LucideIcon {

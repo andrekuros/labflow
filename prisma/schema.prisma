@@ -26,6 +26,7 @@ model User {
   role         String   @default("researcher")
   title        String? // e.g. "PhD candidate", "Postdoc"
   avatarColor  String   @default("#6366f1")
+  preferences  String   @default("{}") // JSON: navHidden, sidebarCollapsed
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -39,6 +40,7 @@ model User {
   agentRuns     AgentRun[]
   apiKeys       ApiKey[]
   notifications Notification[]
+  academicProfile AcademicProfile?
 }
 
 model ProjectMembership {
@@ -85,6 +87,36 @@ model Project {
   interfaces   Interface[]
   verificationCases VerificationCase[]
   aiDrafts     AiDraft[]
+}
+
+// Academic tracking for graduate students (msc/phd).
+model AcademicProfile {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String   @unique
+  // program: msc | phd
+  program   String   @default("msc")
+  // status: active | completed | suspended
+  status    String   @default("active")
+  motivation           String @default("")
+  objective              String @default("")
+  problemStatement     String @default("")
+  hypothesis             String @default("")
+  methodology            String @default("")
+  academicContribution   String @default("")
+  expectedResults        String @default("")
+  limitations            String @default("")
+  theoreticalFramework   String @default("")
+  advisorName            String?
+  coAdvisorName          String?
+  startDate              DateTime?
+  expectedDefenseDate    DateTime?
+  // JSON arrays: courses [{code,name,status,grade?}], pending [{title,kind,dueDate?,status}]
+  coursesJson            String @default("[]")
+  pendingJson            String @default("[]")
+  notes                  String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Work package / activity (WBS node, hierarchical -> systems engineering).

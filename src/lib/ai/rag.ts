@@ -4,7 +4,7 @@ import { embed } from "@/lib/ai/provider";
 import { chunkText, cosineSimilarity } from "@/lib/ai/embeddings";
 
 export type IngestInput = {
-  sourceType: "article" | "post" | "comment" | "task" | "deliverable";
+  sourceType: "article" | "post" | "comment" | "task" | "deliverable" | "user" | "project" | "requirement" | "academic";
   sourceId: string;
   projectId?: string | null;
   text: string;
