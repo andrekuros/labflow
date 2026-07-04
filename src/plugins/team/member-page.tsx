@@ -12,7 +12,8 @@ import {
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Card, Badge, Avatar, LinkButton } from "@/components/ui";
-import { ROLES } from "@/components/team/team-client";
+import { ROLES, UserProfileEditor } from "@/components/team/team-client";
+import { canManageUserProfiles } from "@/lib/user-access";
 import { formatDate, daysUntil } from "@/lib/utils";
 import { PRIORITIES } from "@/components/board/types";
 
@@ -32,7 +33,8 @@ const PROJECT_ROLE: Record<string, string> = {
 
 export default async function MemberPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  await requireUser();
+  const session = await requireUser();
+  const isAdmin = canManageUserProfiles(session.role);
 
   const user = await prisma.user.findUnique({
     where: { id },
@@ -47,6 +49,7 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
   });
 
   if (!user) notFound();
+  if (!isAdmin && user.accountStatus !== "active") notFound();
 
   const activeTasks = user.assignedTasks.filter((t) => t.status !== "done");
   const doneTasks = user.assignedTasks.filter((t) => t.status === "done");
@@ -67,6 +70,8 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
       <Link href="/team" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
         <ArrowLeft size={15} /> Equipe
       </Link>
+
+      {isAdmin && <UserProfileEditor userId={user.id} role={user.role} title={user.title} />}
 
       <div className="mb-6 flex flex-wrap items-start gap-5">
         <Avatar name={user.name} color={user.avatarColor} size="lg" />

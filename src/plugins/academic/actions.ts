@@ -32,7 +32,7 @@ export type AcademicFormData = {
 
 function canEditProfile(session: { id: string; role: string }, userId: string) {
   if (session.id === userId) return true;
-  return session.role === "admin" || session.role === "researcher";
+  return session.role === "admin" || session.role === "researcher" || session.role === "project_manager";
 }
 
 export async function saveAcademicProfile(userId: string, data: AcademicFormData) {

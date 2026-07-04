@@ -14,8 +14,6 @@ import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui";
 import { logoutAction } from "@/app/actions/auth";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { ThemePicker } from "@/components/theme-picker";
-import { SidebarMenuSettings } from "@/components/sidebar-menu-settings";
 import { getNavIcon } from "@/plugins/nav-icons";
 import { setSidebarCollapsed } from "@/app/actions/preferences";
 import type { NavItem } from "@/plugins/types";
@@ -43,7 +41,6 @@ function groupItems(items: NavItem[]) {
 export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isAdmin = user.role === "admin";
   const collapsed = Boolean(preferences.sidebarCollapsed);
   const hidden = new Set(preferences.navHidden ?? []);
   const [pending, start] = useTransition();
@@ -134,8 +131,6 @@ export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }
       </nav>
 
       <div className="space-y-1 border-t border-border px-2 py-2">
-        {!collapsed && <SidebarMenuSettings navItems={navItems} preferences={preferences} />}
-
         <button
           type="button"
           disabled={pending}
@@ -147,28 +142,25 @@ export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }
           title={collapsed ? "Expandir menu" : "Recolher menu"}
         >
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-          {!collapsed && (collapsed ? "Expandir" : "Recolher menu")}
+          {!collapsed && "Recolher menu"}
         </button>
 
-        {isAdmin && (
-          <Link
-            href="/settings"
-            title="Configuracoes"
-            className={cn(
-              "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
-              pathname.startsWith("/settings")
-                ? "bg-brand/15 font-medium text-fg"
-                : "text-muted hover:bg-surface2 hover:text-fg",
-              collapsed && "justify-center px-2",
-            )}
-          >
-            <Settings size={17} />
-            {!collapsed && "Configuracoes"}
-          </Link>
-        )}
+        <Link
+          href="/settings"
+          title="Configuracoes"
+          className={cn(
+            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
+            pathname.startsWith("/settings")
+              ? "bg-brand/15 font-medium text-fg"
+              : "text-muted hover:bg-surface2 hover:text-fg",
+            collapsed && "justify-center px-2",
+          )}
+        >
+          <Settings size={17} />
+          {!collapsed && "Configuracoes"}
+        </Link>
       </div>
 
-      {!collapsed && <ThemePicker />}
       {!collapsed && <NotificationBell initialUnread={unreadNotifications} />}
 
       <div className="border-t border-border p-3">

@@ -5,7 +5,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ u
   const session = await requireUser();
   const { user: userId } = await searchParams;
 
-  if (userId && (session.role === "admin" || session.role === "researcher")) {
+  if (userId && (session.role === "admin" || session.role === "researcher" || session.role === "project_manager")) {
     const view = await AcademicUserPage(userId, session);
     if (view) return view;
   }

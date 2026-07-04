@@ -38,6 +38,8 @@ import { verificationManifest } from "@/plugins/verification/manifest";
 import { handlers as verificationApi } from "@/plugins/verification/api";
 import { academicManifest } from "@/plugins/academic/manifest";
 import { handlers as academicApi } from "@/plugins/academic/api";
+import { feedbackManifest } from "@/plugins/feedback/manifest";
+import { handlers as feedbackApi } from "@/plugins/feedback/api";
 
 const BUILTIN_PLUGINS = [
   projectsManifest,
@@ -53,6 +55,7 @@ const BUILTIN_PLUGINS = [
   assistantManifest,
   teamManifest,
   academicManifest,
+  feedbackManifest,
   examplePlugin,
 ];
 
@@ -70,6 +73,7 @@ const API_REGISTRATIONS: [string, typeof teamApi][] = [
   ["board", boardApi],
   ["assistant", assistantApi],
   ["academic", academicApi],
+  ["feedback", feedbackApi],
 ];
 
 let loaded = false;

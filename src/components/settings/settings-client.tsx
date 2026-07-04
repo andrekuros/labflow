@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { Card, Badge, Button, PageHeader } from "@/components/ui";
+import { useState } from "react";
+import { cn } from "@/lib/utils";
+import { PageHeader } from "@/components/ui";
+import { ThemePanel } from "@/components/settings/theme-panel";
+import { MenuPreferencesForm } from "@/components/settings/menu-preferences-form";
 import {
   togglePluginAction,
   savePluginSettingsAction,
@@ -19,6 +22,11 @@ import {
 } from "@/plugins/knowledge/actions";
 import { TEMPLATE_CATALOG, type TemplateKey } from "@/plugins/knowledge/templates-catalog";
 import type { SettingsField } from "@/plugins/types";
+import type { UserPreferences } from "@/lib/user-preferences";
+import type { NavItem } from "@/plugins/types";
+import { useTransition } from "react";
+import { Card, Badge, Button } from "@/components/ui";
+import { PermissionsTab } from "@/components/settings/permissions-tab";
 
 type PluginRow = {
   id: string;
@@ -68,19 +76,39 @@ type NextcloudSettingsRow = {
   hasStoredPassword: boolean;
 };
 
+type TabId = "preferencias" | "permissoes" | "ia" | "conhecimento" | "plugins" | "integracoes" | "projetos";
+
+const TABS: { id: TabId; label: string; adminOnly?: boolean }[] = [
+  { id: "preferencias", label: "Preferencias" },
+  { id: "permissoes", label: "Permissoes", adminOnly: true },
+  { id: "ia", label: "IA", adminOnly: true },
+  { id: "conhecimento", label: "Conhecimento", adminOnly: true },
+  { id: "plugins", label: "Plugins", adminOnly: true },
+  { id: "integracoes", label: "Integracoes", adminOnly: true },
+  { id: "projetos", label: "Projetos", adminOnly: true },
+];
+
 export function SettingsClient({
+  isAdmin,
+  navItems,
+  preferences,
   plugins,
   apiKeys,
   projects,
   aiSettings,
   nextcloudSettings,
 }: {
+  isAdmin: boolean;
+  navItems: NavItem[];
+  preferences: UserPreferences;
   plugins: PluginRow[];
   apiKeys: ApiKeyRow[];
   projects: ProjectRow[];
   aiSettings: AiSettingsRow;
   nextcloudSettings: NextcloudSettingsRow;
 }) {
+  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+  const [tab, setTab] = useState<TabId>("preferencias");
   const [pending, start] = useTransition();
   const [newKey, setNewKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -92,83 +120,175 @@ export function SettingsClient({
     <div>
       <PageHeader
         title="Configuracoes"
-        description="Gerencie modulos, preferencias por plugin e chaves de API para integracoes."
+        description={
+          isAdmin
+            ? "Preferencias pessoais, modulos, IA e integracoes do laboratorio."
+            : "Tema, aparência e personalizacao do menu."
+        }
       />
 
-      <AiProviderForm initial={aiSettings} disabled={pending} onSave={(data) => start(() => saveAiSettingsAction(data))} />
-
-      <NextcloudForm
-        initial={nextcloudSettings}
-        disabled={pending}
-        onSave={(data) => start(() => saveNextcloudSettingsAction(data))}
-        onTest={(data) => testNextcloudAction(data)}
-        onSync={() => syncNextcloudAction()}
-      />
-
-      <div className="space-y-4">
-        {plugins.map((p) => (
-          <Card key={p.id} className="p-5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold">{p.name}</h3>
-                  <Badge className="bg-surface2 text-muted">v{p.version}</Badge>
-                  {p.requires.length > 0 && (
-                    <Badge className="bg-surface2 text-muted">requer: {p.requires.join(", ")}</Badge>
-                  )}
-                </div>
-                <p className="mt-1 text-sm text-muted">{p.description}</p>
-                <p className="mt-1 font-mono text-[11px] text-muted">{p.id}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge color={p.enabled ? "#22c55e" : "#64748b"}>{p.enabled ? "Ativo" : "Desativado"}</Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => start(() => togglePluginAction(p.id, !p.enabled))}
-                >
-                  {p.enabled ? "Desativar" : "Ativar"}
-                </Button>
-                {p.settingsSchema.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setExpanded(expanded === p.id ? null : p.id)}
-                  >
-                    Configurar
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {expanded === p.id && p.settingsSchema.length > 0 && (
-              <form
-                className="mt-4 space-y-3 border-t border-border pt-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  start(() => savePluginSettingsAction(p.id, drafts[p.id] ?? {}));
-                }}
-              >
-                {p.settingsSchema.map((field) => (
-                  <SettingsFieldInput
-                    key={field.key}
-                    field={field}
-                    value={drafts[p.id]?.[field.key]}
-                    onChange={(val) =>
-                      setDrafts((d) => ({ ...d, [p.id]: { ...d[p.id], [field.key]: val } }))
-                    }
-                  />
-                ))}
-                <Button type="submit" size="sm" disabled={pending}>Salvar configuracoes</Button>
-              </form>
+      <div className="mb-6 flex flex-wrap gap-1 border-b border-border">
+        {visibleTabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={cn(
+              "rounded-t-lg px-4 py-2 text-sm transition",
+              tab === t.id
+                ? "border border-b-0 border-border bg-surface font-medium text-fg"
+                : "text-muted hover:bg-surface2 hover:text-fg",
             )}
-          </Card>
+          >
+            {t.label}
+          </button>
         ))}
       </div>
 
-      {projects.length > 0 && (
-        <Card className="mt-8 p-5">
+      {tab === "preferencias" && (
+        <div className="space-y-6">
+          <ThemePanel />
+          <MenuPreferencesForm navItems={navItems} preferences={preferences} />
+        </div>
+      )}
+
+      {tab === "permissoes" && isAdmin && <PermissionsTab />}
+
+      {tab === "ia" && isAdmin && (
+        <AiProviderForm initial={aiSettings} disabled={pending} onSave={(data) => start(() => saveAiSettingsAction(data))} />
+      )}
+
+      {tab === "conhecimento" && isAdmin && (
+        <NextcloudForm
+          initial={nextcloudSettings}
+          disabled={pending}
+          onSave={(data) => start(() => saveNextcloudSettingsAction(data))}
+          onTest={(data) => testNextcloudAction(data)}
+          onSync={() => syncNextcloudAction()}
+        />
+      )}
+
+      {tab === "plugins" && isAdmin && (
+        <div className="space-y-4">
+          {plugins.map((p) => (
+            <Card key={p.id} className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold">{p.name}</h3>
+                    <Badge className="bg-surface2 text-muted">v{p.version}</Badge>
+                    {p.requires.length > 0 && (
+                      <Badge className="bg-surface2 text-muted">requer: {p.requires.join(", ")}</Badge>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-muted">{p.description}</p>
+                  <p className="mt-1 font-mono text-[11px] text-muted">{p.id}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge color={p.enabled ? "#22c55e" : "#64748b"}>{p.enabled ? "Ativo" : "Desativado"}</Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => start(() => togglePluginAction(p.id, !p.enabled))}
+                  >
+                    {p.enabled ? "Desativar" : "Ativar"}
+                  </Button>
+                  {p.settingsSchema.length > 0 && (
+                    <Button variant="outline" size="sm" onClick={() => setExpanded(expanded === p.id ? null : p.id)}>
+                      Configurar
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {expanded === p.id && p.settingsSchema.length > 0 && (
+                <form
+                  className="mt-4 space-y-3 border-t border-border pt-4"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    start(() => savePluginSettingsAction(p.id, drafts[p.id] ?? {}));
+                  }}
+                >
+                  {p.settingsSchema.map((field) => (
+                    <SettingsFieldInput
+                      key={field.key}
+                      field={field}
+                      value={drafts[p.id]?.[field.key]}
+                      onChange={(val) =>
+                        setDrafts((d) => ({ ...d, [p.id]: { ...d[p.id], [field.key]: val } }))
+                      }
+                    />
+                  ))}
+                  <Button type="submit" size="sm" disabled={pending}>Salvar configuracoes</Button>
+                </form>
+              )}
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {tab === "integracoes" && isAdmin && (
+        <div className="space-y-6">
+          <Card className="p-5">
+            <h2 className="mb-2 text-sm font-semibold">Chaves de API</h2>
+            <p className="mb-4 text-sm text-muted">
+              Use no header <span className="font-mono text-xs">Authorization: Bearer lf_...</span> para integrar com a API REST.
+            </p>
+
+            {newKey && (
+              <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                <p className="font-medium">Chave criada (copie agora, nao sera exibida novamente):</p>
+                <code className="mt-1 block break-all font-mono text-xs">{newKey}</code>
+              </div>
+            )}
+
+            <div className="mb-4 space-y-2">
+              {apiKeys.map((k) => (
+                <div key={k.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                  <div>
+                    <p className="font-medium">{k.name}</p>
+                    <p className="text-xs text-muted">
+                      Criada {new Date(k.createdAt).toLocaleString("pt-BR")}
+                      {k.lastUsed ? ` · Ultimo uso ${new Date(k.lastUsed).toLocaleString("pt-BR")}` : ""}
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" disabled={pending} onClick={() => start(() => deleteApiKeyAction(k.id))}>
+                    Revogar
+                  </Button>
+                </div>
+              ))}
+              {apiKeys.length === 0 && <p className="text-sm text-muted">Nenhuma chave criada.</p>}
+            </div>
+
+            <Button
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  const key = await createApiKeyAction(`integracao-${Date.now()}`);
+                  setNewKey(key);
+                })
+              }
+            >
+              Gerar nova chave
+            </Button>
+          </Card>
+
+          <Card className="p-5">
+            <h2 className="mb-2 text-sm font-semibold">Backup</h2>
+            <p className="mb-4 text-sm text-muted">
+              Exporta o banco SQLite e as configuracoes dos plugins em um arquivo <span className="font-mono text-xs">.tar.gz</span>.
+            </p>
+            <a href="/api/admin/backup" className="inline-flex">
+              <Button size="sm" variant="outline">Baixar backup</Button>
+            </a>
+          </Card>
+        </div>
+      )}
+
+      {tab === "projetos" && isAdmin && projects.length > 0 && (
+        <Card className="p-5">
           <h2 className="mb-2 text-sm font-semibold">Configuracoes por projeto</h2>
           <p className="mb-4 text-sm text-muted">
             Overrides por projeto para plugins que suportam configuracao contextual (ex: colunas do Kanban).
@@ -176,66 +296,6 @@ export function SettingsClient({
           <ProjectSettingsForm projects={projects} />
         </Card>
       )}
-
-      <Card className="mt-8 p-5">
-        <h2 className="mb-2 text-sm font-semibold">Chaves de API</h2>
-        <p className="mb-4 text-sm text-muted">
-          Use no header <span className="font-mono text-xs">Authorization: Bearer lf_...</span> para integrar com a API REST.
-        </p>
-
-        {newKey && (
-          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            <p className="font-medium">Chave criada (copie agora, nao sera exibida novamente):</p>
-            <code className="mt-1 block break-all font-mono text-xs">{newKey}</code>
-          </div>
-        )}
-
-        <div className="mb-4 space-y-2">
-          {apiKeys.map((k) => (
-            <div key={k.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-              <div>
-                <p className="font-medium">{k.name}</p>
-                <p className="text-xs text-muted">
-                  Criada {new Date(k.createdAt).toLocaleString("pt-BR")}
-                  {k.lastUsed ? ` · Ultimo uso ${new Date(k.lastUsed).toLocaleString("pt-BR")}` : ""}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pending}
-                onClick={() => start(() => deleteApiKeyAction(k.id))}
-              >
-                Revogar
-              </Button>
-            </div>
-          ))}
-          {apiKeys.length === 0 && <p className="text-sm text-muted">Nenhuma chave criada.</p>}
-        </div>
-
-        <Button
-          size="sm"
-          disabled={pending}
-          onClick={() =>
-            start(async () => {
-              const key = await createApiKeyAction(`integracao-${Date.now()}`);
-              setNewKey(key);
-            })
-          }
-        >
-          Gerar nova chave
-        </Button>
-      </Card>
-
-      <Card className="mt-8 p-5">
-        <h2 className="mb-2 text-sm font-semibold">Backup</h2>
-        <p className="mb-4 text-sm text-muted">
-          Exporta o banco SQLite e as configuracoes dos plugins em um arquivo <span className="font-mono text-xs">.tar.gz</span>.
-        </p>
-        <a href="/api/admin/backup" className="inline-flex">
-          <Button size="sm" variant="outline">Baixar backup</Button>
-        </a>
-      </Card>
     </div>
   );
 }
@@ -262,7 +322,7 @@ function AiProviderForm({
   const [embeddingModel, setEmbeddingModel] = useState(initial.aiEmbeddingModel);
 
   return (
-    <Card className="mb-8 p-5">
+    <Card className="p-5">
       <h2 className="mb-1 text-sm font-semibold">Assistente de IA — Provedor LLM</h2>
       <p className="mb-4 text-sm text-muted">
         Configure o modelo usado em <span className="font-mono text-xs">/assistant</span>.
@@ -414,7 +474,7 @@ function NextcloudForm({
   });
 
   return (
-    <Card className="mb-8 p-5">
+    <Card className="p-5">
       <h2 className="mb-1 text-sm font-semibold">Nextcloud — Base de conhecimento</h2>
       <p className="mb-4 text-sm text-muted">
         Sincronize arquivos <span className="font-mono text-xs">.md</span> e <span className="font-mono text-xs">.txt</span> do Nextcloud para o LabFlow e indexe no RAG automaticamente.
@@ -442,50 +502,22 @@ function NextcloudForm({
 
         <div>
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-url">URL do Nextcloud</label>
-          <input
-            id="nc-url"
-            type="text"
-            className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-            placeholder="https://cloud.conceptio.com.br"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
+          <input id="nc-url" type="text" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder="https://cloud.conceptio.com.br" value={url} onChange={(e) => setUrl(e.target.value)} />
         </div>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-user">Usuario</label>
-          <input
-            id="nc-user"
-            type="text"
-            className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-          />
+          <input id="nc-user" type="text" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" value={username} onChange={(e) => setUsername(e.target.value)} />
         </div>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-pass">Senha de app</label>
-          <input
-            id="nc-pass"
-            type="password"
-            className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-            placeholder={initial.hasStoredPassword ? "••••••••  (deixe vazio para manter)" : "Senha de app"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="off"
-          />
+          <input id="nc-pass" type="password" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder={initial.hasStoredPassword ? "••••••••  (deixe vazio para manter)" : "Senha de app"} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="off" />
         </div>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-folder">Pasta</label>
-          <input
-            id="nc-folder"
-            type="text"
-            className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-            placeholder="LabFlow"
-            value={folder}
-            onChange={(e) => setFolder(e.target.value)}
-          />
+          <input id="nc-folder" type="text" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder="LabFlow" value={folder} onChange={(e) => setFolder(e.target.value)} />
         </div>
 
         <label className="flex items-center gap-2 text-sm md:col-span-2">
@@ -495,103 +527,31 @@ function NextcloudForm({
 
         <div>
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-interval">Intervalo (minutos)</label>
-          <input
-            id="nc-interval"
-            type="number"
-            min={5}
-            className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-            value={autoSyncMinutes}
-            onChange={(e) => setAutoSyncMinutes(Number(e.target.value))}
-          />
+          <input id="nc-interval" type="number" min={5} className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" value={autoSyncMinutes} onChange={(e) => setAutoSyncMinutes(Number(e.target.value))} />
         </div>
 
         <div>
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-exclude">Pastas excluidas</label>
-          <input
-            id="nc-exclude"
-            type="text"
-            className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-            placeholder="templates, rascunhos"
-            value={excludeFolders}
-            onChange={(e) => setExcludeFolders(e.target.value)}
-          />
+          <input id="nc-exclude" type="text" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder="templates, rascunhos" value={excludeFolders} onChange={(e) => setExcludeFolders(e.target.value)} />
         </div>
 
         <div className="md:col-span-2">
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-map">Mapeamento pasta → projeto (JSON)</label>
-          <textarea
-            id="nc-map"
-            rows={5}
-            className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs"
-            value={folderMapJson}
-            onChange={(e) => setFolderMapJson(e.target.value)}
-            placeholder='{"projetos/EEG": "EEG", "equipamentos": ""}'
-          />
-          <p className="mt-1 text-xs text-muted">Chave = pasta no vault. Valor = key do projeto no LabFlow (ex: EEG).</p>
+          <textarea id="nc-map" rows={5} className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={folderMapJson} onChange={(e) => setFolderMapJson(e.target.value)} placeholder='{"projetos/EEG": "EEG", "equipamentos": ""}' />
         </div>
 
         <div className="flex flex-wrap gap-2 md:col-span-2">
           <Button type="submit" size="sm" disabled={disabled}>Salvar</Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled}
-            onClick={async () => {
-              const r = await onTest(payload());
-              setTestResult(r.ok ? `OK: ${r.message}` : `Erro: ${r.message}`);
-            }}
-          >
-            Testar conexao
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled || !enabled}
-            onClick={async () => {
-              const r = await onSync();
-              setSyncResult(r.ok ? r.message : `Erro: ${r.message}`);
-            }}
-          >
-            Sincronizar agora
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={disabled || !enabled}
-            onClick={async () => {
-              const h = await getKnowledgeHealthAction();
-              const s = h.summary;
-              setHealthSummary(
-                `${s.missingTitle} sem titulo, ${s.noProject} sem projeto, ${s.stale} desatualizados, ${s.emptyFolders} pastas vazias`,
-              );
-            }}
-          >
-            Ver saude
-          </Button>
+          <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={async () => { const r = await onTest(payload()); setTestResult(r.ok ? `OK: ${r.message}` : `Erro: ${r.message}`); }}>Testar conexao</Button>
+          <Button type="button" variant="outline" size="sm" disabled={disabled || !enabled} onClick={async () => { const r = await onSync(); setSyncResult(r.ok ? r.message : `Erro: ${r.message}`); }}>Sincronizar agora</Button>
+          <Button type="button" variant="outline" size="sm" disabled={disabled || !enabled} onClick={async () => { const h = await getKnowledgeHealthAction(); const s = h.summary; setHealthSummary(`${s.missingTitle} sem titulo, ${s.noProject} sem projeto, ${s.stale} desatualizados, ${s.emptyFolders} pastas vazias`); }}>Ver saude</Button>
         </div>
 
         <div className="md:col-span-2">
           <p className="mb-2 text-xs font-medium text-muted">Templates no Nextcloud</p>
           <div className="flex flex-wrap gap-2">
             {(Object.keys(TEMPLATE_CATALOG) as TemplateKey[]).map((key) => (
-              <Button
-                key={key}
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={disabled || !enabled}
-                onClick={async () => {
-                  const r = await createNextcloudTemplateAction({
-                    templateKey: key,
-                    targetFolder: "templates",
-                    title: TEMPLATE_CATALOG[key].label,
-                  });
-                  setTemplateMsg(r.message);
-                }}
-              >
+              <Button key={key} type="button" variant="outline" size="sm" disabled={disabled || !enabled} onClick={async () => { const r = await createNextcloudTemplateAction({ templateKey: key, targetFolder: "templates", title: TEMPLATE_CATALOG[key].label }); setTemplateMsg(r.message); }}>
                 {TEMPLATE_CATALOG[key].label}
               </Button>
             ))}
@@ -624,34 +584,20 @@ function ProjectSettingsForm({ projects }: { projects: ProjectRow[] }) {
         } catch {
           return;
         }
-        start(() =>
-          savePluginProjectSettingsAction("board", projectId, { columns: parsed }),
-        );
+        start(() => savePluginProjectSettingsAction("board", projectId, { columns: parsed }));
       }}
     >
       <div>
         <label className="mb-1 block text-xs font-medium text-muted" htmlFor="project-select">Projeto</label>
-        <select
-          id="project-select"
-          className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-          value={projectId}
-          onChange={(e) => setProjectId(e.target.value)}
-        >
+        <select id="project-select" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.key} — {p.name}</option>
           ))}
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs font-medium text-muted" htmlFor="board-columns">
-          Colunas Kanban (plugin board)
-        </label>
-        <textarea
-          id="board-columns"
-          className="min-h-20 w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs"
-          value={columns}
-          onChange={(e) => setColumns(e.target.value)}
-        />
+        <label className="mb-1 block text-xs font-medium text-muted" htmlFor="board-columns">Colunas Kanban (plugin board)</label>
+        <textarea id="board-columns" className="min-h-20 w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={columns} onChange={(e) => setColumns(e.target.value)} />
       </div>
       <Button type="submit" size="sm" disabled={pending || !projectId}>Salvar override do projeto</Button>
     </form>
@@ -672,12 +618,7 @@ function SettingsFieldInput({
   if (field.type === "boolean") {
     return (
       <label className="flex items-center gap-2 text-sm" htmlFor={id}>
-        <input
-          id={id}
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(e.target.checked)}
-        />
+        <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
         {field.label}
       </label>
     );
@@ -687,12 +628,7 @@ function SettingsFieldInput({
     return (
       <div>
         <label className="mb-1 block text-xs font-medium text-muted" htmlFor={id}>{field.label}</label>
-        <select
-          id={id}
-          className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-          value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
-        >
+        <select id={id} className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
           {field.options?.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
@@ -705,15 +641,7 @@ function SettingsFieldInput({
     return (
       <div>
         <label className="mb-1 block text-xs font-medium text-muted" htmlFor={id}>{field.label}</label>
-        <input
-          id={id}
-          type="password"
-          className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-          placeholder={value === "__MASKED__" ? "••••••••  (deixe vazio para manter)" : "Informe a chave"}
-          value={value === "__MASKED__" ? "" : String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
-          autoComplete="off"
-        />
+        <input id={id} type="password" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder={value === "__MASKED__" ? "••••••••  (deixe vazio para manter)" : "Informe a chave"} value={value === "__MASKED__" ? "" : String(value ?? "")} onChange={(e) => onChange(e.target.value)} autoComplete="off" />
         {field.description && <p className="mt-1 text-xs text-muted">{field.description}</p>}
       </div>
     );
@@ -723,18 +651,7 @@ function SettingsFieldInput({
     return (
       <div>
         <label className="mb-1 block text-xs font-medium text-muted" htmlFor={id}>{field.label}</label>
-        <textarea
-          id={id}
-          className="min-h-24 w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs"
-          value={typeof value === "string" ? value : JSON.stringify(value ?? field.defaultValue ?? null, null, 2)}
-          onChange={(e) => {
-            try {
-              onChange(JSON.parse(e.target.value));
-            } catch {
-              onChange(e.target.value);
-            }
-          }}
-        />
+        <textarea id={id} className="min-h-24 w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={typeof value === "string" ? value : JSON.stringify(value ?? field.defaultValue ?? null, null, 2)} onChange={(e) => { try { onChange(JSON.parse(e.target.value)); } catch { onChange(e.target.value); } }} />
         {field.description && <p className="mt-1 text-xs text-muted">{field.description}</p>}
       </div>
     );
@@ -743,13 +660,7 @@ function SettingsFieldInput({
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-muted" htmlFor={id}>{field.label}</label>
-      <input
-        id={id}
-        type={field.type === "number" ? "number" : "text"}
-        className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
-        value={String(value ?? "")}
-        onChange={(e) => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)}
-      />
+      <input id={id} type={field.type === "number" ? "number" : "text"} className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" value={String(value ?? "")} onChange={(e) => onChange(field.type === "number" ? Number(e.target.value) : e.target.value)} />
       {field.description && <p className="mt-1 text-xs text-muted">{field.description}</p>}
     </div>
   );

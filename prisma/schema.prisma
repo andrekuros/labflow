@@ -22,9 +22,13 @@ model User {
   email        String   @unique
   name         String
   passwordHash String
-  // global role: admin | researcher | phd | msc | student
+  // global role: admin | researcher | project_manager | contributor | viewer
   role         String   @default("researcher")
   title        String? // e.g. "PhD candidate", "Postdoc"
+  // accountStatus: active | pending | rejected
+  accountStatus String  @default("active")
+  approvedAt   DateTime?
+  approvedBy   String?
   avatarColor  String   @default("#6366f1")
   preferences  String   @default("{}") // JSON: navHidden, sidebarCollapsed
   createdAt    DateTime @default(now())
@@ -41,6 +45,7 @@ model User {
   apiKeys       ApiKey[]
   notifications Notification[]
   academicProfile AcademicProfile?
+  feedbacks     Feedback[]
 }
 
 model ProjectMembership {
@@ -89,12 +94,12 @@ model Project {
   aiDrafts     AiDraft[]
 }
 
-// Academic tracking for graduate students (msc/phd).
+// Academic tracking for graduate students.
 model AcademicProfile {
   id        String   @id @default(cuid())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String   @unique
-  // program: msc | phd
+  // program: msc | phd | postdoc | professor | student
   program   String   @default("msc")
   // status: active | completed | suspended
   status    String   @default("active")
@@ -526,4 +531,48 @@ model AgentRun {
   // status: pending | running | done | error
   status    String   @default("done")
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Feedback / bug reports
+// ---------------------------------------------------------------------------
+
+model Feedback {
+  id            String   @id @default(cuid())
+  title         String
+  description   String   @default("")
+  // category: bug | suggestion | question
+  category      String   @default("suggestion")
+  // status: open | triaged | closed
+  status        String   @default("open")
+  platformUrl   String?
+  submittedBy   User     @relation(fields: [submittedById], references: [id], onDelete: Cascade)
+  submittedById String
+  linkedDrafts  String   @default("[]") // JSON: AiDraft IDs generated from this feedback
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([submittedById])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// RBAC: permissions per module+action, assigned to system roles
+// ---------------------------------------------------------------------------
+
+model Permission {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. "project:create", "task:edit"
+  description String   @default("")
+  module      String   @default("system") // system | project | task | knowledge | ...
+  action      String   @default("view") // view | create | edit | delete | manage
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  role         String
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([role, permissionId])
 }

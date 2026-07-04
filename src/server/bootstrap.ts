@@ -4,6 +4,7 @@ import { ingest } from "@/lib/ai/rag";
 import { registerBuiltinPlugins } from "@/plugins";
 import { initPluginRegistry } from "@/plugins/registry";
 import { indexTask, indexProject, indexUser, indexAcademicProfile, ensureKnowledgeIndexed } from "@/lib/ai/knowledge-indexer";
+import { processFeedback } from "@/lib/ai/feedback-agent";
 
 /**
  * One-time server bootstrap: subscribes the knowledge/RAG ingestion pipeline to
@@ -31,6 +32,7 @@ export function bootstrap() {
   on("user.created", (e) => void indexUserFromEvent(e));
   on("user.updated", (e) => void indexUserFromEvent(e));
   on("academic.updated", (e) => void indexAcademicFromEvent(e));
+  on("feedback.submitted", (e) => void processFeedbackFromEvent(e));
 
   registerBuiltinPlugins();
 }
@@ -44,6 +46,11 @@ export async function bootstrapAsync() {
   startDueDateNotifier();
   const { ensureArtifactsFormatArticle } = await import("@/lib/artifacts/ensure-doc");
   await ensureArtifactsFormatArticle();
+  const { seedPermissions, migrateRoles } = await import("@/lib/permissions-seed");
+  await seedPermissions();
+  await migrateRoles();
+  const { ensureDocArticles } = await import("@/lib/docs-seed");
+  void ensureDocArticles();
   void ensureKnowledgeIndexed();
 }
 
@@ -87,4 +94,16 @@ async function indexAcademicFromEvent(event: { payload?: Record<string, unknown>
   const userId = event.payload?.userId as string | undefined;
   if (!userId) return;
   await indexAcademicProfile(userId);
+}
+
+async function processFeedbackFromEvent(event: { payload?: Record<string, unknown> }) {
+  const p = event.payload;
+  if (!p?.id) return;
+  await processFeedback({
+    id: p.id as string,
+    title: (p.title as string) || "",
+    description: (p.description as string) || "",
+    category: (p.category as string) || "suggestion",
+    platformUrl: p.platformUrl as string | undefined,
+  });
 }

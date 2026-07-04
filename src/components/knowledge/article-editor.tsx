@@ -6,6 +6,7 @@ import { Save, Pencil } from "lucide-react";
 import { Button, Input, Textarea, Badge } from "@/components/ui";
 import { updateArticle } from "@/plugins/knowledge/actions";
 import { formatDate } from "@/lib/utils";
+import { MarkdownView } from "@/components/markdown/markdown-view";
 
 export function ArticleEditor({
   article,
@@ -34,8 +35,8 @@ export function ArticleEditor({
           </div>
           {canEdit && <Button variant="outline" onClick={() => setEditing(true)}><Pencil size={15} /> Editar</Button>}
         </div>
-        <article className="whitespace-pre-wrap rounded-xl border border-border bg-surface p-6 text-sm leading-relaxed">
-          {article.content || <span className="text-muted">Sem conteudo.</span>}
+        <article className="rounded-xl border border-border bg-surface p-6 text-sm">
+          <MarkdownView content={article.content} />
         </article>
       </div>
     );
@@ -45,7 +46,18 @@ export function ArticleEditor({
     <div className="space-y-3">
       <Input value={title} onChange={(e) => setTitle(e.target.value)} className="h-11 text-lg" />
       <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="tags separadas por virgula" />
-      <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={18} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted">Markdown</p>
+          <Textarea value={content} onChange={(e) => setContent(e.target.value)} rows={22} className="font-mono text-xs" />
+        </div>
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted">Visualizacao</p>
+          <div className="max-h-[520px] overflow-y-auto rounded-xl border border-border bg-surface p-4">
+            <MarkdownView content={content} />
+          </div>
+        </div>
+      </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => setEditing(false)}>Cancelar</Button>
         <Button disabled={pending} onClick={() => start(async () => { await updateArticle({ id: article.id, title, content, tags }); setEditing(false); router.refresh(); })}>

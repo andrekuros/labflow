@@ -1,7 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 
-export type NotificationKind = "sync_error" | "due_task" | "due_deliverable" | "forum_reply";
+export type NotificationKind = "sync_error" | "due_task" | "due_deliverable" | "forum_reply" | "user_pending";
 
 export async function createNotification(input: {
   userId: string;

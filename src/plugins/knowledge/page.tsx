@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/rbac";
+import { requireUser, hasPermission } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { viewableProjectIds } from "@/lib/projects";
 import { getNextcloudSettingsForUi } from "@/plugins/knowledge/nextcloud-config";
@@ -10,7 +10,7 @@ import { KnowledgeClient } from "@/components/knowledge/knowledge-client";
 export default async function KnowledgePage() {
   const session = await requireUser();
   const ids = await viewableProjectIds(session);
-  const isAdmin = session.role === "admin";
+  const isAdmin = await hasPermission(session, "knowledge:edit");
 
   const [articles, projects, nextcloud, healthReport] = await Promise.all([
     prisma.knowledgeArticle.findMany({

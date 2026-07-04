@@ -6,15 +6,13 @@ import { AcademicProfileForm, profileToForm } from "@/components/academic/academ
 import { ensureAcademicProfile } from "@/plugins/academic/actions";
 import { ChevronRight } from "lucide-react";
 
-const STUDENT_ROLES = new Set(["phd", "msc", "student"]);
-
 export default async function AcademicPage() {
   const session = await requireUser();
-  const isStaff = session.role === "admin" || session.role === "researcher";
+  const isStaff = session.role === "admin" || session.role === "researcher" || session.role === "project_manager";
 
   if (isStaff) {
     const students = await prisma.user.findMany({
-      where: { role: { in: ["phd", "msc", "student"] } },
+      where: { academicProfile: { isNot: null } },
       include: { academicProfile: true },
       orderBy: { name: "asc" },
     });
@@ -68,9 +66,9 @@ export default async function AcademicPage() {
 }
 
 export async function AcademicUserPage(userId: string, session: { id: string; role: string; name: string }) {
-  const isStaff = session.role === "admin" || session.role === "researcher";
-  const target = await prisma.user.findUnique({ where: { id: userId } });
-  if (!target || !STUDENT_ROLES.has(target.role)) return null;
+  const isStaff = session.role === "admin" || session.role === "researcher" || session.role === "project_manager";
+  const target = await prisma.user.findUnique({ where: { id: userId }, include: { academicProfile: true } });
+  if (!target || !target.academicProfile) return null;
 
   const profile = await ensureAcademicProfile(userId);
   const writable = isStaff || session.id === userId;

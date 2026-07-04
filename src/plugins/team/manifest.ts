@@ -11,10 +11,10 @@ export const teamManifest: PluginManifest = {
   settingsSchema: [
     {
       key: "allowSelfRegistration",
-      label: "Permitir auto-cadastro",
+      label: "Permitir cadastro na tela de login",
       type: "boolean",
-      description: "Permite que novos usuarios se registrem sem admin.",
-      defaultValue: false,
+      description: "Novos usuarios se cadastram e aguardam aprovacao do administrador.",
+      defaultValue: true,
     },
     {
       key: "defaultRole",
@@ -22,15 +22,15 @@ export const teamManifest: PluginManifest = {
       type: "select",
       options: [
         { value: "researcher", label: "Pesquisador" },
-        { value: "phd", label: "Doutorando" },
-        { value: "msc", label: "Mestrando" },
-        { value: "student", label: "Aluno" },
+        { value: "project_manager", label: "Gerente de Projetos" },
+        { value: "contributor", label: "Colaborador" },
+        { value: "viewer", label: "Visualizador" },
       ],
-      defaultValue: "student",
+      defaultValue: "contributor",
     },
   ],
   defaultSettings: {
-    allowSelfRegistration: false,
-    defaultRole: "student",
+    allowSelfRegistration: true,
+    defaultRole: "contributor",
   },
 };

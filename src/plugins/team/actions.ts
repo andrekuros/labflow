@@ -5,9 +5,12 @@ import { prisma } from "@/lib/db";
 import { getSession, hashPassword } from "@/lib/auth";
 import { emit } from "@/lib/events";
 import { indexUser } from "@/lib/ai/knowledge-indexer";
+import { notifyAdmins } from "@/lib/notifications";
+import { ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
+import { canManageUserProfiles } from "@/lib/user-access";
 
 const COLORS = ["#6366f1", "#0ea5e9", "#ec4899", "#f59e0b", "#10b981", "#a855f7", "#ef4444"];
-const VALID_ROLES = new Set(["admin", "researcher", "phd", "msc", "student"]);
+const VALID_ROLES = new Set(["admin", "researcher", "project_manager", "contributor", "viewer"]);
 
 function parseCsvLine(line: string): string[] {
   const out: string[] = [];
@@ -30,35 +33,130 @@ function parseCsvLine(line: string): string[] {
   return out;
 }
 
-export async function createUser(input: { name: string; email: string; password: string; role: string; title?: string }) {
+async function requireAdminSession() {
   const session = await getSession();
-  if (!session || session.role !== "admin") throw new Error("Apenas administradores podem criar usuarios.");
+  if (!session || !canManageUserProfiles(session.role)) {
+    throw new Error("Apenas administradores podem gerenciar usuarios.");
+  }
+  return session;
+}
 
-  const user = await createUserRecord(input);
+export async function createUser(input: { name: string; email: string; password: string; role: string; title?: string }) {
+  const session = await requireAdminSession();
+  const user = await createUserRecord(input, "active");
   await emit({ type: "user.created", actorId: session.id, payload: { id: user.id, name: user.name } });
   revalidatePath("/team");
   return user;
 }
 
-async function createUserRecord(input: { name: string; email: string; password: string; role: string; title?: string }) {
+export async function registerPendingUser(input: { name: string; email: string; password: string; title?: string }) {
+  await ensurePluginRegistry();
+  const settings = getPluginSettings("team");
+  if (!Boolean(settings.allowSelfRegistration ?? true)) {
+    throw new Error("Cadastro publico desabilitado pelo administrador.");
+  }
+
+  const defaultRole = String(settings.defaultRole ?? "contributor");
+  const user = await createUserRecord(
+    { ...input, role: defaultRole },
+    "pending",
+  );
+
+  await notifyAdmins({
+    kind: "user_pending",
+    title: "Novo cadastro aguardando aprovacao",
+    message: `${user.name} (${user.email}) solicitou acesso ao LabFlow.`,
+    href: "/team",
+  });
+
+  return user;
+}
+
+async function createUserRecord(
+  input: { name: string; email: string; password: string; role: string; title?: string },
+  accountStatus: "active" | "pending",
+) {
   const email = input.email.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) throw new Error("Ja existe um usuario com este email.");
+  if (existing) {
+    if (existing.accountStatus === "pending") {
+      throw new Error("Este email ja possui cadastro aguardando aprovacao.");
+    }
+    throw new Error("Ja existe um usuario com este email.");
+  }
 
-  const role = VALID_ROLES.has(input.role) ? input.role : "researcher";
+  const role = VALID_ROLES.has(input.role) ? input.role : "contributor";
   const count = await prisma.user.count();
   const user = await prisma.user.create({
     data: {
       name: input.name.trim(),
       email,
       passwordHash: await hashPassword(input.password),
-      role,
+      role: accountStatus === "pending" ? role : role,
       title: input.title?.trim() || null,
+      accountStatus,
       avatarColor: COLORS[count % COLORS.length],
     },
   });
-  await indexUser(user.id).catch(() => {});
+  if (accountStatus === "active") {
+    await indexUser(user.id).catch(() => {});
+  }
   return user;
+}
+
+export async function approveUser(userId: string, input?: { role?: string; title?: string }) {
+  const session = await requireAdminSession();
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.accountStatus !== "pending") throw new Error("Usuario invalido ou ja processado.");
+
+  const role = input?.role && VALID_ROLES.has(input.role) ? input.role : user.role;
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      accountStatus: "active",
+      role,
+      title: input?.title !== undefined ? input.title || null : user.title,
+      approvedAt: new Date(),
+      approvedBy: session.id,
+    },
+  });
+
+  await indexUser(userId).catch(() => {});
+  await emit({ type: "user.updated", actorId: session.id, payload: { id: userId } });
+  revalidatePath("/team");
+}
+
+export async function rejectUser(userId: string) {
+  const session = await requireAdminSession();
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || user.accountStatus !== "pending") throw new Error("Usuario invalido ou ja processado.");
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { accountStatus: "rejected", approvedAt: null, approvedBy: session.id },
+  });
+
+  revalidatePath("/team");
+}
+
+export async function updateUserProfile(
+  userId: string,
+  input: { role?: string; title?: string | null },
+) {
+  const session = await requireAdminSession();
+  const data: { role?: string; title?: string | null } = {};
+  if (input.role !== undefined) {
+    if (!VALID_ROLES.has(input.role)) throw new Error("Papel invalido.");
+    data.role = input.role;
+  }
+  if (input.title !== undefined) data.title = input.title || null;
+
+  await prisma.user.update({ where: { id: userId }, data });
+  await emit({ type: "user.updated", actorId: session.id, payload: { id: userId } });
+  await indexUser(userId).catch(() => {});
+  revalidatePath("/team");
+  revalidatePath(`/team/${userId}`);
 }
 
 export type CsvImportResult = {
@@ -68,8 +166,7 @@ export type CsvImportResult = {
 };
 
 export async function importUsersFromCsv(csv: string): Promise<CsvImportResult> {
-  const session = await getSession();
-  if (!session || session.role !== "admin") throw new Error("Apenas administradores.");
+  const session = await requireAdminSession();
 
   const lines = csv
     .split(/\r?\n/)
@@ -113,7 +210,7 @@ export async function importUsersFromCsv(csv: string): Promise<CsvImportResult> 
     }
 
     try {
-      const user = await createUserRecord({ name, email, password, role, title: title || undefined });
+      const user = await createUserRecord({ name, email, password, role, title: title || undefined }, "active");
       await emit({ type: "user.created", actorId: session.id, payload: { id: user.id, name: user.name } });
       result.created += 1;
     } catch (e) {
@@ -126,9 +223,5 @@ export async function importUsersFromCsv(csv: string): Promise<CsvImportResult> 
 }
 
 export async function setUserRole(userId: string, role: string) {
-  const session = await getSession();
-  if (!session || session.role !== "admin") throw new Error("Apenas administradores.");
-  await prisma.user.update({ where: { id: userId }, data: { role } });
-  await emit({ type: "user.updated", actorId: session.id, payload: { id: userId } });
-  revalidatePath("/team");
+  return updateUserProfile(userId, { role });
 }

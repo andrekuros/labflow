@@ -2,9 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
-import { Button, Card, Input, Select, Label, Textarea } from "@/components/ui";
-import { createUser, importUsersFromCsv, setUserRole } from "@/plugins/team/actions";
+import { Plus, X, Check, UserX } from "lucide-react";
+import { Button, Card, Input, Select, Label, Textarea, Badge } from "@/components/ui";
+import { createUser, importUsersFromCsv, setUserRole, approveUser, rejectUser, updateUserProfile } from "@/plugins/team/actions";
 
 export const ROLES: Record<string, string> = {
   admin: "Administrador", researcher: "Pesquisador", phd: "Doutorando", msc: "Mestrando", student: "Aluno",
@@ -109,5 +109,165 @@ export function RoleControl({ userId, role }: { userId: string; role: string }) 
     <Select value={role} disabled={pending} onChange={(e) => start(async () => { await setUserRole(userId, e.target.value); router.refresh(); })}>
       {Object.entries(ROLES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
     </Select>
+  );
+}
+
+export type PendingUserRow = {
+  id: string;
+  name: string;
+  email: string;
+  title: string | null;
+  role: string;
+  createdAt: string;
+};
+
+export function PendingUsersPanel({ users }: { users: PendingUserRow[] }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [roles, setRoles] = useState<Record<string, string>>(
+    Object.fromEntries(users.map((u) => [u.id, u.role])),
+  );
+  const [titles, setTitles] = useState<Record<string, string>>(
+    Object.fromEntries(users.map((u) => [u.id, u.title ?? ""])),
+  );
+  const [error, setError] = useState("");
+
+  if (users.length === 0) return null;
+
+  return (
+    <Card className="mb-6 p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 className="text-sm font-semibold">Cadastros aguardando aprovacao</h2>
+        <Badge className="bg-amber-500/15 text-amber-600">{users.length}</Badge>
+      </div>
+      <p className="mb-4 text-xs text-muted">Somente administradores podem aprovar acesso e definir papel do usuario.</p>
+      {error && <p className="mb-2 text-sm text-red-400">{error}</p>}
+      <div className="space-y-3">
+        {users.map((u) => (
+          <div key={u.id} className="rounded-lg border border-border p-4">
+            <div className="mb-3">
+              <p className="font-medium">{u.name}</p>
+              <p className="text-xs text-muted">{u.email} · {new Date(u.createdAt).toLocaleString("pt-BR")}</p>
+            </div>
+            <div className="mb-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Papel ao aprovar</Label>
+                <Select
+                  value={roles[u.id] ?? u.role}
+                  className="w-full"
+                  onChange={(e) => setRoles((r) => ({ ...r, [u.id]: e.target.value }))}
+                >
+                  {Object.entries(ROLES).map(([k, v]) => (
+                    <option key={k} value={k}>{v}</option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label>Titulo</Label>
+                <Input
+                  value={titles[u.id] ?? ""}
+                  onChange={(e) => setTitles((t) => ({ ...t, [u.id]: e.target.value }))}
+                  placeholder="ex: Mestrando"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    setError("");
+                    try {
+                      await approveUser(u.id, {
+                        role: roles[u.id] ?? u.role,
+                        title: titles[u.id] ?? "",
+                      });
+                      router.refresh();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Erro");
+                    }
+                  })
+                }
+              >
+                <Check size={14} /> Aprovar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    setError("");
+                    try {
+                      await rejectUser(u.id);
+                      router.refresh();
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : "Erro");
+                    }
+                  })
+                }
+              >
+                <UserX size={14} /> Rejeitar
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+export function UserProfileEditor({
+  userId,
+  role,
+  title,
+}: {
+  userId: string;
+  role: string;
+  title: string | null;
+}) {
+  const router = useRouter();
+  const [r, setR] = useState(role);
+  const [t, setT] = useState(title ?? "");
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState("");
+
+  return (
+    <Card className="mb-6 p-5">
+      <h2 className="mb-1 text-sm font-semibold">Perfil do usuario (admin)</h2>
+      <p className="mb-4 text-xs text-muted">Papel global e titulo — controla acesso aos recursos do laboratorio.</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label>Papel</Label>
+          <Select value={r} className="w-full" onChange={(e) => setR(e.target.value)}>
+            {Object.entries(ROLES).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Titulo</Label>
+          <Input value={t} onChange={(e) => setT(e.target.value)} placeholder="ex: Doutorando" />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-2">
+        <Button
+          size="sm"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              setMsg("");
+              await updateUserProfile(userId, { role: r, title: t || null });
+              setMsg("Salvo.");
+              router.refresh();
+            })
+          }
+        >
+          Salvar perfil
+        </Button>
+        {msg && <span className="text-xs text-brand">{msg}</span>}
+      </div>
+    </Card>
   );
 }

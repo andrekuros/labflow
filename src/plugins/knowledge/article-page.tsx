@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { requireUser } from "@/lib/rbac";
+import { requireUser, hasPermission } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { ArticleEditor } from "@/components/knowledge/article-editor";
 
@@ -11,7 +11,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
   const article = await prisma.knowledgeArticle.findUnique({ where: { id }, include: { author: true } });
   if (!article) notFound();
 
-  const canEdit = session.role === "admin" || article.authorId === session.id;
+  const canEdit = (await hasPermission(session, "knowledge:edit")) || article.authorId === session.id;
 
   return (
     <div className="mx-auto max-w-3xl">

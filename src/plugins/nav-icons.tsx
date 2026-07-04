@@ -18,6 +18,7 @@ import {
   Cpu,
   ShieldCheck,
   GraduationCap,
+  MessageSquareWarning,
   type LucideIcon,
 } from "lucide-react";
 
@@ -39,6 +40,7 @@ const ICONS: Record<string, LucideIcon> = {
   Cpu,
   ShieldCheck,
   GraduationCap,
+  MessageSquareWarning,
 };
 
 export function getNavIcon(name: string): LucideIcon {

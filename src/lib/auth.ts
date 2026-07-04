@@ -71,9 +71,22 @@ export async function getCurrentUser() {
 }
 
 export async function authenticate(email: string, password: string) {
-  const user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
   if (!user) return null;
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) return null;
   return user;
+}
+
+export type AuthRejectReason = "invalid" | "pending" | "rejected";
+
+export async function authenticateForLogin(
+  email: string,
+  password: string,
+): Promise<{ user: Awaited<ReturnType<typeof authenticate>>; reason?: AuthRejectReason }> {
+  const user = await authenticate(email, password);
+  if (!user) return { user: null, reason: "invalid" };
+  if (user.accountStatus === "pending") return { user: null, reason: "pending" };
+  if (user.accountStatus === "rejected") return { user: null, reason: "rejected" };
+  return { user };
 }

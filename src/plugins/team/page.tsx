@@ -2,20 +2,30 @@ import Link from "next/link";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Card, Avatar, Badge, PageHeader } from "@/components/ui";
-import { NewUserButton, RoleControl, ROLES } from "@/components/team/team-client";
+import { NewUserButton, RoleControl, ROLES, PendingUsersPanel } from "@/components/team/team-client";
+import { canManageUserProfiles } from "@/lib/user-access";
 import { ChevronRight } from "lucide-react";
 
 export default async function TeamPage() {
   const session = await requireUser();
-  const isAdmin = session.role === "admin";
+  const isAdmin = canManageUserProfiles(session.role);
 
-  const users = await prisma.user.findMany({
-    include: {
-      _count: { select: { memberships: true, assignedTasks: true } },
-      memberships: { include: { project: true } },
-    },
-    orderBy: { name: "asc" },
-  });
+  const [pendingUsers, users] = await Promise.all([
+    isAdmin
+      ? prisma.user.findMany({
+          where: { accountStatus: "pending" },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
+    prisma.user.findMany({
+      where: { accountStatus: "active" },
+      include: {
+        _count: { select: { memberships: true, assignedTasks: true } },
+        memberships: { include: { project: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+  ]);
 
   return (
     <div>
@@ -25,7 +35,21 @@ export default async function TeamPage() {
         actions={isAdmin ? <NewUserButton /> : undefined}
       />
 
+      {isAdmin && (
+        <PendingUsersPanel
+          users={pendingUsers.map((u) => ({
+            id: u.id,
+            name: u.name,
+            email: u.email,
+            title: u.title,
+            role: u.role,
+            createdAt: u.createdAt.toISOString(),
+          }))}
+        />
+      )}
+
       <Card className="divide-y divide-border">
+        {users.length === 0 && <p className="p-4 text-sm text-muted">Nenhum membro ativo.</p>}
         {users.map((u) => (
           <div key={u.id} className="flex flex-wrap items-center gap-4 p-4">
             <Link href={`/team/${u.id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-4 transition hover:opacity-90">
