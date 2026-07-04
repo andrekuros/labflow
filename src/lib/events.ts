@@ -19,6 +19,7 @@ export type DomainEventType =
   | "requirement.created"
   | "article.created"
   | "article.updated"
+  | "article.deleted"
   | "thread.created"
   | "post.created"
   | "project.created"

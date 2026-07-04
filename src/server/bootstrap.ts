@@ -1,8 +1,8 @@
 import "server-only";
 import { on } from "@/lib/events";
-import { ingest } from "@/lib/ai/rag";
+import { ingest, purge } from "@/lib/ai/rag";
 import { registerBuiltinPlugins } from "@/plugins";
-import { initPluginRegistry } from "@/plugins/registry";
+import { initPluginRegistry, ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
 import { indexTask, indexProject, indexUser, indexAcademicProfile, ensureKnowledgeIndexed } from "@/lib/ai/knowledge-indexer";
 import { processFeedback } from "@/lib/ai/feedback-agent";
 
@@ -17,8 +17,9 @@ export function bootstrap() {
   if (g.__labflowBootstrapped) return;
   g.__labflowBootstrapped = true;
 
-  on("article.created", (e) => ingestFromEvent("article", e));
-  on("article.updated", (e) => ingestFromEvent("article", e));
+  on("article.created", (e) => ingestArticleFromEvent(e));
+  on("article.updated", (e) => ingestArticleFromEvent(e));
+  on("article.deleted", (e) => purgeArticleFromEvent(e));
   on("post.created", (e) => ingestFromEvent("post", e));
   on("thread.created", (e) => ingestFromEvent("post", e));
   on("task.created", (e) => ingestFromEvent("task", e));
@@ -52,6 +53,19 @@ export async function bootstrapAsync() {
   const { ensureDocArticles } = await import("@/lib/docs-seed");
   void ensureDocArticles();
   void ensureKnowledgeIndexed();
+}
+
+async function ingestArticleFromEvent(event: { projectId?: string | null; payload?: Record<string, unknown> }) {
+  await ensurePluginRegistry();
+  const settings = getPluginSettings("knowledge");
+  if (settings.autoIngest === false) return;
+  await ingestFromEvent("article", event);
+}
+
+async function purgeArticleFromEvent(event: { targetId?: string | null; payload?: Record<string, unknown> }) {
+  const id = (event.targetId ?? event.payload?.id) as string | undefined;
+  if (!id) return;
+  await purge("article", id);
 }
 
 async function ingestFromEvent(

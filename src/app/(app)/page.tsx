@@ -144,6 +144,7 @@ function labelForEvent(type: string) {
     "requirement.created": "Requisito criado",
     "article.created": "Artigo de conhecimento criado",
     "article.updated": "Artigo atualizado",
+    "article.deleted": "Artigo excluido",
     "thread.created": "Novo topico no forum",
     "post.created": "Nova mensagem no forum",
     "project.created": "Projeto criado",

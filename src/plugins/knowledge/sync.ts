@@ -149,8 +149,14 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
     let removed = 0;
     for (const article of stale) {
       if (article.externalPath && !seenPaths.has(article.externalPath)) {
-        await prisma.embedding.deleteMany({ where: { sourceType: "article", sourceId: article.id } });
         await prisma.knowledgeArticle.delete({ where: { id: article.id } });
+        await emit({
+          type: "article.deleted",
+          actorId: actorId ?? null,
+          projectId: article.projectId,
+          targetId: article.id,
+          payload: { id: article.id, title: article.title },
+        });
         removed++;
       }
     }

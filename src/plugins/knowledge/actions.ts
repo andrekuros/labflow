@@ -3,10 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { requireAdmin } from "@/lib/rbac";
+import { requireAdmin, requirePermission } from "@/lib/rbac";
+import { viewableProjectIds } from "@/lib/projects";
+import {
+  assertCanDeleteArticle,
+  assertCanEditArticle,
+  canViewArticle,
+  articleVisibilityWhere,
+} from "@/lib/knowledge-access";
 import { emit } from "@/lib/events";
 import { search as ragSearch } from "@/lib/ai/rag";
-import { ensurePluginRegistry, getPlugin, setPluginSettings } from "@/plugins/registry";
+import { ensurePluginRegistry, getPlugin, setPluginSettings, getPluginSettings } from "@/plugins/registry";
 import { syncNextcloudKnowledge } from "@/plugins/knowledge/sync";
 import { testNextcloudConnection } from "@/plugins/knowledge/nextcloud-client";
 import { getNextcloudSettings, mergeNextcloudPassword, parseFolderProjectMapJson } from "@/plugins/knowledge/nextcloud-config";
@@ -17,8 +24,11 @@ import type { KnowledgeSearchResult } from "@/plugins/knowledge/types";
 import type { HealthReport } from "@/plugins/knowledge/health";
 
 export async function createArticle(input: { title: string; content: string; tags?: string; projectId?: string | null }) {
-  const session = await getSession();
-  if (!session) throw new Error("Nao autenticado");
+  const session = await requirePermission("knowledge:create");
+  if (input.projectId) {
+    const ids = await viewableProjectIds(session);
+    if (!ids.includes(input.projectId)) throw new Error("Sem acesso a este projeto.");
+  }
   const a = await prisma.knowledgeArticle.create({
     data: {
       title: input.title,
@@ -36,30 +46,70 @@ export async function createArticle(input: { title: string; content: string; tag
 export async function updateArticle(input: { id: string; title: string; content: string; tags?: string }) {
   const session = await getSession();
   if (!session) throw new Error("Nao autenticado");
+  const existing = await prisma.knowledgeArticle.findUnique({ where: { id: input.id } });
+  if (!existing) throw new Error("Artigo nao encontrado");
+  if (existing.externalSource === "nextcloud") {
+    throw new Error("Artigos sincronizados do Nextcloud sao somente leitura. Edite no vault externo.");
+  }
+  await assertCanEditArticle(session, existing);
   const a = await prisma.knowledgeArticle.update({
     where: { id: input.id },
     data: { title: input.title, content: input.content, tags: input.tags ?? "" },
   });
   await emit({ type: "article.updated", actorId: session.id, projectId: a.projectId, targetId: a.id, payload: { id: a.id, title: a.title, content: a.content } });
   revalidatePath("/knowledge");
+  revalidatePath(`/knowledge/${input.id}`);
   return a;
 }
 
+export async function deleteArticle(id: string) {
+  const session = await getSession();
+  if (!session) throw new Error("Nao autenticado");
+  const existing = await prisma.knowledgeArticle.findUnique({ where: { id } });
+  if (!existing) throw new Error("Artigo nao encontrado");
+  await assertCanDeleteArticle(session, existing);
+  await prisma.knowledgeArticle.delete({ where: { id } });
+  await emit({
+    type: "article.deleted",
+    actorId: session.id,
+    projectId: existing.projectId,
+    targetId: id,
+    payload: { id, title: existing.title },
+  });
+  revalidatePath("/knowledge");
+  revalidatePath(`/knowledge/${id}`);
+}
+
 export async function searchKnowledge(query: string): Promise<KnowledgeSearchResult> {
+  const session = await getSession();
+  if (!session) throw new Error("Nao autenticado");
+  await ensurePluginRegistry();
+  const settings = getPluginSettings("knowledge");
+  const semanticEnabled = settings.enableSemanticSearch !== false;
+  const ragScanLimit = Number(settings.ragScanLimit ?? 2000);
+
   const q = query.trim();
   if (!q) return { articles: [] };
 
-  const hits = await ragSearch(q, { limit: 10 });
-  const articleHits = hits.filter((h) => h.sourceType === "article");
-
+  const visibility = await articleVisibilityWhere(session);
   const byId = new Map<string, { score: number; snippet: string }>();
-  for (const h of articleHits) {
-    const cur = byId.get(h.sourceId);
-    if (!cur || h.score > cur.score) byId.set(h.sourceId, { score: h.score, snippet: h.chunk });
+
+  if (semanticEnabled) {
+    const hits = await ragSearch(q, { limit: 10, sourceType: "article", scanLimit: ragScanLimit });
+    const articleHits = hits.filter((h) => h.sourceType === "article");
+    for (const h of articleHits) {
+      const cur = byId.get(h.sourceId);
+      if (!cur || h.score > cur.score) byId.set(h.sourceId, { score: h.score, snippet: h.chunk });
+    }
   }
 
   const keyword = await prisma.knowledgeArticle.findMany({
-    where: { OR: [{ title: { contains: q } }, { content: { contains: q } }, { tags: { contains: q } }] },
+    where: {
+      AND: [
+        visibility,
+        { OR: [{ title: { contains: q } }, { content: { contains: q } }, { tags: { contains: q } }] },
+      ],
+    },
     take: 10,
   });
   for (const k of keyword) {
@@ -67,18 +117,24 @@ export async function searchKnowledge(query: string): Promise<KnowledgeSearchRes
   }
 
   const ids = [...byId.keys()];
-  const articles = await prisma.knowledgeArticle.findMany({ where: { id: { in: ids } } });
+  if (ids.length === 0) return { articles: [] };
+
+  const articles = await prisma.knowledgeArticle.findMany({
+    where: { id: { in: ids }, ...visibility },
+  });
   const map = new Map(articles.map((a) => [a.id, a]));
 
+  const visible: { id: string; title: string; snippet: string; score: number }[] = [];
+  for (const id of ids) {
+    const a = map.get(id);
+    if (!a) continue;
+    if (!(await canViewArticle(session, a))) continue;
+    const meta = byId.get(id)!;
+    visible.push({ id: a.id, title: a.title, snippet: meta.snippet, score: meta.score });
+  }
+
   return {
-    articles: ids
-      .map((id) => {
-        const a = map.get(id);
-        const meta = byId.get(id)!;
-        return a ? { id: a.id, title: a.title, snippet: meta.snippet, score: meta.score } : null;
-      })
-      .filter(Boolean as unknown as (x: { id: string; title: string; snippet: string; score: number } | null) => x is { id: string; title: string; snippet: string; score: number })
-      .sort((a, b) => b.score - a.score),
+    articles: visible.sort((a, b) => b.score - a.score),
   };
 }
 

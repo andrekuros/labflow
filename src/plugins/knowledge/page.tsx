@@ -1,31 +1,59 @@
 import { requireUser, hasPermission } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
+import { articleVisibilityWhere } from "@/lib/knowledge-access";
 import { viewableProjectIds } from "@/lib/projects";
 import { getNextcloudSettingsForUi } from "@/plugins/knowledge/nextcloud-config";
 import { buildFolderTree } from "@/plugins/knowledge/folder-tree";
 import { computeKnowledgeHealth } from "@/plugins/knowledge/health";
+import { ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
 import { PageHeader } from "@/components/ui";
 import { KnowledgeClient } from "@/components/knowledge/knowledge-client";
 
-export default async function KnowledgePage() {
-  const session = await requireUser();
-  const ids = await viewableProjectIds(session);
-  const isAdmin = await hasPermission(session, "knowledge:edit");
+const PAGE_SIZE = 30;
 
-  const [articles, projects, nextcloud, healthReport] = await Promise.all([
-    prisma.knowledgeArticle.findMany({
-      where: { OR: [{ projectId: null }, { projectId: { in: ids } }] },
-      include: { project: true, author: true },
-      orderBy: { updatedAt: "desc" },
-    }),
-    prisma.project.findMany({ where: { id: { in: ids } }, orderBy: { name: "asc" } }),
-    isAdmin ? getNextcloudSettingsForUi() : Promise.resolve(null),
-    isAdmin ? computeKnowledgeHealth() : Promise.resolve(null),
+export default async function KnowledgePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; folder?: string }>;
+}) {
+  const session = await requireUser();
+  await ensurePluginRegistry();
+  const { page: pageParam, folder } = await searchParams;
+  const page = Math.max(1, Number(pageParam ?? 1) || 1);
+
+  const [canCreate, canManage] = await Promise.all([
+    hasPermission(session, "knowledge:create"),
+    hasPermission(session, "knowledge:edit"),
   ]);
 
-  const folderTree = buildFolderTree(
-    articles.map((a) => ({ externalFolder: a.externalFolder, externalSource: a.externalSource })),
-  );
+  const visibility = await articleVisibilityWhere(session);
+
+  const [totalCount, articles, projects, nextcloud, healthReport, settings] = await Promise.all([
+    prisma.knowledgeArticle.count({ where: visibility }),
+    prisma.knowledgeArticle.findMany({
+      where: visibility,
+      include: { project: true, author: true },
+      orderBy: { updatedAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.project.findMany({
+      where: { id: { in: await viewableProjectIds(session) } },
+      orderBy: { name: "asc" },
+    }),
+    canManage ? getNextcloudSettingsForUi() : Promise.resolve(null),
+    canManage ? computeKnowledgeHealth() : Promise.resolve(null),
+    Promise.resolve(getPluginSettings("knowledge")),
+  ]);
+
+  const allForTree = await prisma.knowledgeArticle.findMany({
+    where: visibility,
+    select: { externalFolder: true, externalSource: true },
+  });
+  const folderTree = buildFolderTree(allForTree);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const semanticSearchEnabled = settings.enableSemanticSearch !== false;
 
   return (
     <div>
@@ -34,8 +62,15 @@ export default async function KnowledgePage() {
         description="Navegue por pastas do Nextcloud, use templates e alimente o assistente de IA com busca semantica."
       />
       <KnowledgeClient
-        isAdmin={isAdmin}
-        nextcloud={nextcloud}
+        canCreate={canCreate}
+        canManage={canManage}
+        semanticSearchEnabled={semanticSearchEnabled}
+        nextcloud={nextcloud?.enabled ? {
+          enabled: true,
+          lastSyncAt: nextcloud.lastSyncAt,
+          lastSyncMessage: nextcloud.lastSyncMessage,
+          lastSyncStatus: nextcloud.lastSyncStatus,
+        } : null}
         folderTree={folderTree}
         healthReport={healthReport}
         projects={projects.map((p) => ({ id: p.id, key: p.key, name: p.name }))}
@@ -51,6 +86,8 @@ export default async function KnowledgePage() {
           externalFolder: a.externalFolder,
           externalStatus: a.externalStatus,
         }))}
+        pagination={{ page, totalPages, totalCount, pageSize: PAGE_SIZE }}
+        initialFolder={folder ?? "all"}
       />
     </div>
   );

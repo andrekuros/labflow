@@ -2,18 +2,24 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save, Pencil } from "lucide-react";
+import { Save, Pencil, Trash2, ExternalLink, Cloud } from "lucide-react";
 import { Button, Input, Textarea, Badge } from "@/components/ui";
-import { updateArticle } from "@/plugins/knowledge/actions";
+import { updateArticle, deleteArticle } from "@/plugins/knowledge/actions";
 import { formatDate } from "@/lib/utils";
 import { MarkdownView } from "@/components/markdown/markdown-view";
 
 export function ArticleEditor({
   article,
   canEdit,
+  canDelete,
+  externalSource,
+  nextcloudFileUrl,
 }: {
   article: { id: string; title: string; content: string; tags: string; author: string; updatedAt: string };
   canEdit: boolean;
+  canDelete: boolean;
+  externalSource?: string | null;
+  nextcloudFileUrl?: string | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -21,19 +27,61 @@ export function ArticleEditor({
   const [content, setContent] = useState(article.content);
   const [tags, setTags] = useState(article.tags);
   const [pending, start] = useTransition();
+  const isNextcloud = externalSource === "nextcloud";
 
   if (!editing) {
     return (
       <div>
+        {isNextcloud && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Cloud size={16} className="text-blue-400" />
+              <span>Sincronizado do Nextcloud — somente leitura. Edite no vault externo.</span>
+            </div>
+            {nextcloudFileUrl && (
+              <a
+                href={nextcloudFileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-blue-400 hover:underline"
+              >
+                Abrir no Nextcloud <ExternalLink size={14} />
+              </a>
+            )}
+          </div>
+        )}
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold">{article.title}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-semibold">{article.title}</h1>
+              {isNextcloud && <Badge className="bg-surface2 text-muted">Nextcloud</Badge>}
+            </div>
             <p className="mt-1 text-xs text-muted">por {article.author} - atualizado {formatDate(article.updatedAt)}</p>
             <div className="mt-2 flex flex-wrap gap-1">
               {article.tags.split(",").filter(Boolean).map((t) => <Badge key={t} className="bg-surface2 text-muted">{t.trim()}</Badge>)}
             </div>
           </div>
-          {canEdit && <Button variant="outline" onClick={() => setEditing(true)}><Pencil size={15} /> Editar</Button>}
+          <div className="flex gap-2">
+            {canEdit && !isNextcloud && (
+              <Button variant="outline" onClick={() => setEditing(true)}><Pencil size={15} /> Editar</Button>
+            )}
+            {canDelete && !isNextcloud && (
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  if (!confirm("Excluir este artigo permanentemente?")) return;
+                  start(async () => {
+                    await deleteArticle(article.id);
+                    router.push("/knowledge");
+                    router.refresh();
+                  });
+                }}
+              >
+                <Trash2 size={15} /> Excluir
+              </Button>
+            )}
+          </div>
         </div>
         <article className="rounded-xl border border-border bg-surface p-6 text-sm">
           <MarkdownView content={article.content} />

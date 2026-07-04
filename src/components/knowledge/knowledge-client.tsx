@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Plus, X, Search, Sparkles, FilePlus } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Plus, X, Search, Sparkles, FilePlus, Cloud, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label, Badge } from "@/components/ui";
 import {
   createArticle,
@@ -48,44 +48,81 @@ const STATUS_LABELS: Record<string, string> = {
 export function KnowledgeClient({
   articles,
   projects,
-  isAdmin,
+  canCreate,
+  canManage,
+  semanticSearchEnabled,
   nextcloud,
   folderTree,
   healthReport,
+  pagination,
+  initialFolder,
 }: {
   articles: ArticleItem[];
   projects: { id: string; key: string; name: string }[];
-  isAdmin?: boolean;
+  canCreate: boolean;
+  canManage: boolean;
+  semanticSearchEnabled: boolean;
   nextcloud?: NextcloudInfo;
   folderTree: { nextcloud: FolderTreeNode[]; localCount: number; totalCount: number };
   healthReport?: HealthReport | null;
+  pagination: { page: number; totalPages: number; totalCount: number; pageSize: number };
+  initialFolder: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
+  const [textFilter, setTextFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [results, setResults] = useState<KnowledgeSearchResult | null>(null);
   const [searching, startSearch] = useTransition();
   const [open, setOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [syncing, startSync] = useTransition();
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
-  const [selectedFolder, setSelectedFolder] = useState<string | null>("all");
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(initialFolder);
 
-  const filtered = useMemo(() => {
-    return articles.filter((a) =>
-      articleMatchesFolder(
-        { externalFolder: a.externalFolder ?? null, externalSource: a.externalSource ?? null },
-        selectedFolder,
-      ),
-    );
-  }, [articles, selectedFolder]);
+  function navigateFolder(folder: string | null) {
+    setSelectedFolder(folder);
+    const sp = new URLSearchParams(searchParams.toString());
+    if (folder && folder !== "all") sp.set("folder", folder);
+    else sp.delete("folder");
+    sp.delete("page");
+    router.push(`/knowledge?${sp.toString()}`);
+  }
 
-  function runSearch() {
+  function navigatePage(page: number) {
+    const sp = new URLSearchParams(searchParams.toString());
+    if (page > 1) sp.set("page", String(page));
+    else sp.delete("page");
+    router.push(`/knowledge?${sp.toString()}`);
+  }
+
+  useEffect(() => {
     if (!query.trim()) {
       setResults(null);
       return;
     }
-    startSearch(async () => setResults(await searchKnowledge(query)));
-  }
+    const t = setTimeout(() => {
+      startSearch(async () => setResults(await searchKnowledge(query)));
+    }, 400);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const filtered = useMemo(() => {
+    const q = textFilter.trim().toLowerCase();
+    return articles.filter((a) => {
+      if (!articleMatchesFolder(
+        { externalFolder: a.externalFolder ?? null, externalSource: a.externalSource ?? null },
+        selectedFolder,
+      )) return false;
+      if (statusFilter && a.externalStatus !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        a.title.toLowerCase().includes(q) ||
+        a.tags.toLowerCase().includes(q)
+      );
+    });
+  }, [articles, selectedFolder, textFilter, statusFilter]);
 
   const targetFolder =
     selectedFolder && selectedFolder !== "all" && selectedFolder !== "_local" ? selectedFolder : "geral";
@@ -101,7 +138,7 @@ export function KnowledgeClient({
               : " · aguardando primeiro sync"}
           </span>
         )}
-        {isAdmin && nextcloud?.enabled && (
+        {canManage && nextcloud?.enabled && (
           <>
             <Button
               variant="outline"
@@ -127,23 +164,44 @@ export function KnowledgeClient({
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && runSearch()}
-            placeholder="Busca semantica no conhecimento do laboratorio..."
+            placeholder={semanticSearchEnabled
+              ? "Busca semantica no conhecimento..."
+              : "Buscar por titulo, conteudo ou tags..."}
             className="h-10 pl-8"
           />
         </div>
-        <Button variant="outline" onClick={runSearch} disabled={searching}>
-          <Sparkles size={15} /> {searching ? "Buscando..." : "Buscar"}
-        </Button>
-        <Button onClick={() => setOpen(true)}>
-          <Plus size={16} /> Novo artigo
-        </Button>
+        {searching && (
+          <span className="text-xs text-muted">Buscando...</span>
+        )}
+        {canCreate && (
+          <Button onClick={() => setOpen(true)}>
+            <Plus size={16} /> Novo artigo
+          </Button>
+        )}
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Input
+          value={textFilter}
+          onChange={(e) => setTextFilter(e.target.value)}
+          placeholder="Filtrar por titulo ou tag..."
+          className="h-9 max-w-xs"
+        />
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="h-9">
+          <option value="">Todos os status</option>
+          <option value="draft">Rascunho</option>
+          <option value="active">Ativo</option>
+          <option value="archived">Arquivado</option>
+        </Select>
+        <span className="text-xs text-muted">
+          {pagination.totalCount} artigo(s) no total
+        </span>
       </div>
 
       {syncMsg && <p className="mb-4 text-xs text-muted">{syncMsg}</p>}
-      {isAdmin && nextcloud?.enabled && <KnowledgeHealthPanel initial={healthReport ?? null} />}
+      {canManage && nextcloud?.enabled && <KnowledgeHealthPanel initial={healthReport ?? null} />}
 
-      {results && (
+      {results && query.trim() && (
         <Card className="mb-5 p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Resultados ({results.articles.length})</h3>
@@ -163,7 +221,9 @@ export function KnowledgeClient({
               <Link key={r.id} href={`/knowledge/${r.id}`} className="block rounded-lg border border-border p-3 hover:bg-surface2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium">{r.title}</p>
-                  <span className="text-[11px] text-muted">{Math.round(r.score * 100)}% relevante</span>
+                  {semanticSearchEnabled && (
+                    <span className="text-[11px] text-muted">{Math.round(r.score * 100)}% relevante</span>
+                  )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-xs text-muted">{r.snippet}</p>
               </Link>
@@ -178,7 +238,7 @@ export function KnowledgeClient({
             tree={folderTree.nextcloud}
             localCount={folderTree.localCount}
             selected={selectedFolder}
-            onSelect={setSelectedFolder}
+            onSelect={navigateFolder}
           />
         )}
 
@@ -187,7 +247,7 @@ export function KnowledgeClient({
             <p className="mb-3 text-xs text-muted">
               Filtrando: <span className="font-mono">{selectedFolder === "_local" ? "artigos locais" : selectedFolder}</span>
               {" · "}
-              {filtered.length} artigo(s)
+              {filtered.length} artigo(s) nesta pagina
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -196,7 +256,13 @@ export function KnowledgeClient({
                 <Card className="h-full p-4 transition hover:border-brand/60">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
                     {a.projectKey && <Badge color={a.projectColor ?? "#6366f1"}>{a.projectKey}</Badge>}
-                    {a.externalSource === "nextcloud" && <Badge className="bg-surface2 text-muted">Nextcloud</Badge>}
+                    {a.externalSource === "nextcloud" && (
+                      <span title="Somente leitura — edite no Nextcloud">
+                        <Badge className="bg-surface2 text-muted">
+                          <Cloud size={12} className="mr-1 inline" /> Nextcloud
+                        </Badge>
+                      </span>
+                    )}
                     {a.externalStatus && (
                       <Badge className="bg-surface2 text-muted">{STATUS_LABELS[a.externalStatus] ?? a.externalStatus}</Badge>
                     )}
@@ -222,10 +288,34 @@ export function KnowledgeClient({
             ))}
             {filtered.length === 0 && <p className="text-sm text-muted">Nenhum artigo nesta pasta.</p>}
           </div>
+
+          {pagination.totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.page <= 1}
+                onClick={() => navigatePage(pagination.page - 1)}
+              >
+                <ChevronLeft size={14} /> Anterior
+              </Button>
+              <span className="text-sm text-muted">
+                Pagina {pagination.page} de {pagination.totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pagination.page >= pagination.totalPages}
+                onClick={() => navigatePage(pagination.page + 1)}
+              >
+                Proxima <ChevronRight size={14} />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {open && (
+      {open && canCreate && (
         <NewArticleModal
           projects={projects}
           onClose={() => setOpen(false)}
@@ -236,7 +326,7 @@ export function KnowledgeClient({
         />
       )}
 
-      {templateOpen && isAdmin && (
+      {templateOpen && canManage && (
         <TemplateModal
           targetFolder={targetFolder}
           onClose={() => setTemplateOpen(false)}

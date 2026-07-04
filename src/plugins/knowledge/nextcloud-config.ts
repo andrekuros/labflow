@@ -95,3 +95,19 @@ export function parseFolderProjectMapJson(json: string): FolderProjectMap {
     return {};
   }
 }
+
+/** Build a browser URL to open a synced file in Nextcloud Files. */
+export function buildNextcloudFileUrl(
+  cfg: Pick<NextcloudSettings, "url" | "username" | "folder">,
+  externalPath: string,
+): string | null {
+  const base = cfg.url.replace(/\/+$/, "");
+  if (!base || !externalPath) return null;
+
+  const dir = externalPath.includes("/")
+    ? externalPath.slice(0, externalPath.lastIndexOf("/"))
+    : cfg.folder;
+
+  const dirParam = encodeURIComponent(`/${dir.replace(/^\/+/, "")}`);
+  return `${base}/apps/files/?dir=${dirParam}`;
+}

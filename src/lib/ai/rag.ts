@@ -36,17 +36,26 @@ export type SearchHit = {
   score: number;
 };
 
+/** Remove all embeddings for a source. */
+export async function purge(sourceType: string, sourceId: string) {
+  await prisma.embedding.deleteMany({ where: { sourceType, sourceId } });
+}
+
 /** Semantic search over the embedding store (in-app cosine similarity). */
 export async function search(
   query: string,
-  opts: { projectId?: string | null; limit?: number } = {},
+  opts: { projectId?: string | null; limit?: number; sourceType?: string; scanLimit?: number } = {},
 ): Promise<SearchHit[]> {
   const limit = opts.limit ?? 6;
+  const scanLimit = opts.scanLimit ?? 2000;
   const qVec = await embed(query);
 
   const rows = await prisma.embedding.findMany({
-    where: opts.projectId ? { projectId: opts.projectId } : undefined,
-    take: 2000,
+    where: {
+      ...(opts.projectId ? { projectId: opts.projectId } : {}),
+      ...(opts.sourceType ? { sourceType: opts.sourceType } : {}),
+    },
+    take: scanLimit,
     orderBy: { createdAt: "desc" },
   });
 

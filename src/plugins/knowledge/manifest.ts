@@ -22,6 +22,13 @@ export const knowledgeManifest: PluginManifest = {
       defaultValue: true,
     },
     {
+      key: "ragScanLimit",
+      label: "Limite de embeddings na busca semantica",
+      type: "number",
+      defaultValue: 2000,
+      description: "Quantidade maxima de chunks analisados por busca (padrao 2000).",
+    },
+    {
       key: "nextcloudEnabled",
       label: "Sincronizar com Nextcloud",
       type: "boolean",
@@ -57,6 +64,7 @@ export const knowledgeManifest: PluginManifest = {
   defaultSettings: {
     enableSemanticSearch: true,
     autoIngest: true,
+    ragScanLimit: 2000,
     nextcloudEnabled: false,
     nextcloudUrl: "",
     nextcloudUsername: "",
