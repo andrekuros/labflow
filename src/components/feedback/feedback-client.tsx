@@ -2,7 +2,20 @@
 
 import { useState, useTransition } from "react";
 import { Card, Badge, Button, PageHeader } from "@/components/ui";
-import { submitFeedback, updateFeedbackStatus } from "@/plugins/feedback/actions";
+import {
+  submitFeedback,
+  updateFeedbackStatus,
+  assignFeedback,
+  addFeedbackComment,
+  type FeedbackCategory,
+} from "@/plugins/feedback/actions";
+
+type CommentRow = {
+  id: string;
+  content: string;
+  createdAt: string;
+  author: { id: string; name: string };
+};
 
 type FeedbackRow = {
   id: string;
@@ -11,30 +24,62 @@ type FeedbackRow = {
   category: string;
   status: string;
   platformUrl: string | null;
+  assigneeId: string | null;
+  assignee: { id: string; name: string; email: string } | null;
   createdAt: string;
   submittedBy: { id: string; name: string; email: string };
+  comments: CommentRow[];
 };
 
-const CATEGORY_LABELS: Record<string, string> = { bug: "Bug", suggestion: "Sugestao", question: "Duvida" };
-const STATUS_LABELS: Record<string, string> = { open: "Aberto", triaged: "Triado", closed: "Fechado" };
-const STATUS_COLORS: Record<string, string> = { open: "#f59e0b", triaged: "#3b82f6", closed: "#64748b" };
+type UserOption = { id: string; name: string };
+
+const CATEGORY_LABELS: Record<string, string> = {
+  bug: "Bug",
+  suggestion: "Sugestao",
+  question: "Duvida",
+  equipment: "Equipamento/Material",
+};
+const STATUS_LABELS: Record<string, string> = {
+  open: "Aberto",
+  triaged: "Triado",
+  in_progress: "Em andamento",
+  resolved: "Resolvido",
+  closed: "Fechado",
+};
+const STATUS_COLORS: Record<string, string> = {
+  open: "#f59e0b",
+  triaged: "#3b82f6",
+  in_progress: "#8b5cf6",
+  resolved: "#22c55e",
+  closed: "#64748b",
+};
+const ALL_STATUSES = ["open", "triaged", "in_progress", "resolved", "closed"];
 
 export function FeedbackPage({
   feedbacks: initial,
   canManage,
+  currentUserId,
+  users,
 }: {
   feedbacks: FeedbackRow[];
   canManage: boolean;
+  currentUserId: string;
+  users: UserOption[];
 }) {
   const [feedbacks, setFeedbacks] = useState(initial);
   const [showForm, setShowForm] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [pending, start] = useTransition();
+
+  function updateLocal(id: string, patch: Partial<FeedbackRow>) {
+    setFeedbacks((prev) => prev.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }
 
   return (
     <div>
       <PageHeader
         title="Feedback"
-        description="Reporte erros, sugira melhorias ou tire duvidas sobre a plataforma."
+        description="Reporte erros, sugira melhorias, solicite equipamentos ou tire duvidas."
       />
 
       <div className="mb-4">
@@ -51,9 +96,7 @@ export function FeedbackPage({
               const res = await submitFeedback(data);
               if ("id" in res) {
                 setShowForm(false);
-                const refreshed = await (await fetch("/api/v1/feedback/list")).json();
-                if (Array.isArray(refreshed)) setFeedbacks(refreshed);
-                else window.location.reload();
+                window.location.reload();
               }
             })
           }
@@ -62,56 +105,138 @@ export function FeedbackPage({
 
       <div className="space-y-3">
         {feedbacks.length === 0 && <p className="text-sm text-muted">Nenhum feedback registrado.</p>}
-        {feedbacks.map((fb) => (
-          <Card key={fb.id} className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-medium">{fb.title}</h3>
-                  <Badge className="bg-surface2 text-muted">{CATEGORY_LABELS[fb.category] ?? fb.category}</Badge>
-                  <Badge color={STATUS_COLORS[fb.status]}>{STATUS_LABELS[fb.status] ?? fb.status}</Badge>
+        {feedbacks.map((fb) => {
+          const isExpanded = expanded === fb.id;
+          const canComment = canManage || fb.submittedBy.id === currentUserId;
+
+          return (
+            <Card key={fb.id} className="p-4">
+              <div
+                className="flex cursor-pointer flex-wrap items-start justify-between gap-2"
+                onClick={() => setExpanded(isExpanded ? null : fb.id)}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-medium">{fb.title}</h3>
+                    <Badge className="bg-surface2 text-muted">{CATEGORY_LABELS[fb.category] ?? fb.category}</Badge>
+                    <Badge color={STATUS_COLORS[fb.status]}>{STATUS_LABELS[fb.status] ?? fb.status}</Badge>
+                  </div>
+                  {fb.description && <p className="mt-1 text-sm text-muted">{fb.description}</p>}
+                  <p className="mt-1 text-xs text-muted">
+                    {fb.submittedBy.name} · {new Date(fb.createdAt).toLocaleDateString("pt-BR")}
+                    {fb.assignee && <> · <span className="font-medium">Responsavel: {fb.assignee.name}</span></>}
+                    {fb.platformUrl && <> · <span className="font-mono">{fb.platformUrl}</span></>}
+                    {fb.comments.length > 0 && <> · {fb.comments.length} comentario(s)</>}
+                  </p>
                 </div>
-                {fb.description && <p className="mt-1 text-sm text-muted">{fb.description}</p>}
-                <p className="mt-1 text-xs text-muted">
-                  {fb.submittedBy.name} · {new Date(fb.createdAt).toLocaleDateString("pt-BR")}
-                  {fb.platformUrl && (
-                    <> · <span className="font-mono">{fb.platformUrl}</span></>
-                  )}
-                </p>
               </div>
-              {canManage && fb.status !== "closed" && (
-                <div className="flex gap-1">
-                  {fb.status === "open" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={pending}
-                      onClick={() => start(async () => {
-                        await updateFeedbackStatus(fb.id, "triaged");
-                        setFeedbacks((prev) => prev.map((f) => (f.id === fb.id ? { ...f, status: "triaged" } : f)));
-                      })}
-                    >
-                      Triar
-                    </Button>
+
+              {isExpanded && (
+                <div className="mt-3 space-y-3 border-t border-border pt-3">
+                  {canManage && (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted">Status</label>
+                        <select
+                          className="h-8 rounded-lg border border-border bg-surface2 px-2 text-xs"
+                          value={fb.status}
+                          onChange={(e) =>
+                            start(async () => {
+                              await updateFeedbackStatus(fb.id, e.target.value);
+                              updateLocal(fb.id, { status: e.target.value });
+                            })
+                          }
+                        >
+                          {ALL_STATUSES.map((s) => (
+                            <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs font-medium text-muted">Responsavel</label>
+                        <select
+                          className="h-8 rounded-lg border border-border bg-surface2 px-2 text-xs"
+                          value={fb.assigneeId ?? ""}
+                          onChange={(e) =>
+                            start(async () => {
+                              const val = e.target.value || null;
+                              await assignFeedback(fb.id, val);
+                              const assignee = val ? users.find((u) => u.id === val) : null;
+                              updateLocal(fb.id, {
+                                assigneeId: val,
+                                assignee: assignee ? { ...assignee, email: "" } : null,
+                                status: val ? "in_progress" : fb.status,
+                              });
+                            })
+                          }
+                        >
+                          <option value="">Nenhum</option>
+                          {users.map((u) => (
+                            <option key={u.id} value={u.id}>{u.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pending}
-                    onClick={() => start(async () => {
-                      await updateFeedbackStatus(fb.id, "closed");
-                      setFeedbacks((prev) => prev.map((f) => (f.id === fb.id ? { ...f, status: "closed" } : f)));
-                    })}
-                  >
-                    Fechar
-                  </Button>
+
+                  <div className="space-y-2">
+                    {fb.comments.map((c) => (
+                      <div key={c.id} className="rounded-lg bg-surface2 p-2 text-sm">
+                        <p className="text-xs font-medium text-muted">
+                          {c.author.name} · {new Date(c.createdAt).toLocaleString("pt-BR")}
+                        </p>
+                        <p className="mt-0.5">{c.content}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {canComment && (
+                    <CommentInput
+                      disabled={pending}
+                      onSubmit={(content) =>
+                        start(async () => {
+                          const res = await addFeedbackComment(fb.id, content);
+                          if (res && "id" in res) {
+                            updateLocal(fb.id, {
+                              comments: [...fb.comments, { ...res, createdAt: new Date().toISOString() }],
+                            });
+                          }
+                        })
+                      }
+                    />
+                  )}
                 </div>
               )}
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
     </div>
+  );
+}
+
+function CommentInput({ disabled, onSubmit }: { disabled: boolean; onSubmit: (c: string) => void }) {
+  const [text, setText] = useState("");
+
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!text.trim()) return;
+        onSubmit(text);
+        setText("");
+      }}
+    >
+      <input
+        type="text"
+        className="h-8 flex-1 rounded-lg border border-border bg-surface2 px-3 text-sm"
+        placeholder="Adicionar comentario..."
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <Button type="submit" size="sm" disabled={disabled || !text.trim()}>Enviar</Button>
+    </form>
   );
 }
 
@@ -120,11 +245,11 @@ function FeedbackForm({
   onSubmit,
 }: {
   disabled: boolean;
-  onSubmit: (data: { title: string; description: string; category: "bug" | "suggestion" | "question"; platformUrl?: string }) => void;
+  onSubmit: (data: { title: string; description: string; category: FeedbackCategory; platformUrl?: string }) => void;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<"bug" | "suggestion" | "question">("suggestion");
+  const [category, setCategory] = useState<FeedbackCategory>("suggestion");
   const [url, setUrl] = useState("");
 
   return (
@@ -155,11 +280,12 @@ function FeedbackForm({
             id="fb-cat"
             className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm"
             value={category}
-            onChange={(e) => setCategory(e.target.value as typeof category)}
+            onChange={(e) => setCategory(e.target.value as FeedbackCategory)}
           >
             <option value="bug">Bug / Erro</option>
             <option value="suggestion">Sugestao de melhoria</option>
             <option value="question">Duvida</option>
+            <option value="equipment">Equipamento / Material</option>
           </select>
         </div>
 
