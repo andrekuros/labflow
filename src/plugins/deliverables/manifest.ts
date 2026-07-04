@@ -7,7 +7,7 @@ export const deliverablesManifest: PluginManifest = {
   description: "Produtos com criterios de aceitacao e rastreabilidade a requisitos.",
   icon: "PackageCheck",
   requires: ["projects"],
-  nav: { label: "Entregaveis", href: "/deliverables", icon: "PackageCheck", order: 50, group: "Planejamento" },
+  // nav consolidated into /planning
   apiPrefix: "/api/v1/deliverables",
   settingsSchema: [
     {

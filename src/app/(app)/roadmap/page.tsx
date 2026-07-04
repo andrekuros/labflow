@@ -1,1 +1,5 @@
-export { default } from "@/plugins/roadmap/page";
+import { redirect } from "next/navigation";
+
+export default function RoadmapRedirect() {
+  redirect("/planning?tab=roadmap");
+}

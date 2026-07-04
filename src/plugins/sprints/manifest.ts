@@ -7,7 +7,7 @@ export const sprintsManifest: PluginManifest = {
   description: "Ciclos de trabalho com metas, prazos e progresso.",
   icon: "Timer",
   requires: ["projects"],
-  nav: { label: "Sprints", href: "/sprints", icon: "Timer", order: 30, group: "Trabalho" },
+  // nav consolidated into /planning
   apiPrefix: "/api/v1/sprints",
   settingsSchema: [
     {

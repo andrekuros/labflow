@@ -7,7 +7,7 @@ export const roadmapManifest: PluginManifest = {
   description: "Linha do tempo de marcos, verificacao/validacao e sprints.",
   icon: "Map",
   requires: ["projects", "sprints"],
-  nav: { label: "Roadmap", href: "/roadmap", icon: "Map", order: 40, group: "Planejamento" },
+  // nav consolidated into /planning
   apiPrefix: "/api/v1/roadmap",
   settingsSchema: [
     {

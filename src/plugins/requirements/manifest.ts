@@ -7,7 +7,7 @@ export const requirementsManifest: PluginManifest = {
   description: "Metas e requisitos com rastreabilidade a atividades e entregaveis.",
   icon: "Target",
   requires: ["projects"],
-  nav: { label: "Requisitos", href: "/requirements", icon: "Target", order: 60, group: "Planejamento" },
+  // nav consolidated into /planning
   apiPrefix: "/api/v1/requirements",
   settingsSchema: [
     {

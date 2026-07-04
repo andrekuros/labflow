@@ -1,1 +1,5 @@
-export { default } from "@/plugins/requirements/page";
+import { redirect } from "next/navigation";
+
+export default function RequirementsRedirect() {
+  redirect("/planning?tab=requirements");
+}
