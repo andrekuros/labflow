@@ -75,12 +75,14 @@ const ARTIFACT_LABELS: Record<string, string> = { task: "Tarefa", requirement: "
 
 export function FeedbackPage({
   feedbacks: initial,
+  initialDrafts,
   canManage,
   currentUserId,
   users,
   projects,
 }: {
   feedbacks: FeedbackRow[];
+  initialDrafts: Record<string, DraftRow[]>;
   canManage: boolean;
   currentUserId: string;
   users: UserOption[];
@@ -90,7 +92,7 @@ export function FeedbackPage({
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const [draftsMap, setDraftsMap] = useState<Record<string, DraftRow[]>>({});
+  const [draftsMap, setDraftsMap] = useState<Record<string, DraftRow[]>>(initialDrafts);
   const [aiLoading, setAiLoading] = useState<string | null>(null);
 
   function updateLocal(id: string, patch: Partial<FeedbackRow>) {

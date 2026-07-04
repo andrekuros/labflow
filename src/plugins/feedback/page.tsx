@@ -1,5 +1,5 @@
 import { requireUser, hasPermission } from "@/lib/rbac";
-import { listFeedbacks, listUsers, listActiveProjects } from "@/plugins/feedback/actions";
+import { listFeedbacks, listUsers, listActiveProjects, getLinkedDrafts } from "@/plugins/feedback/actions";
 import { FeedbackPage } from "@/components/feedback/feedback-client";
 
 export default async function FeedbackPluginPage() {
@@ -11,6 +11,9 @@ export default async function FeedbackPluginPage() {
     listActiveProjects(),
   ]);
 
+  const fbIds = feedbacks.map((f) => f.id);
+  const linkedDrafts = fbIds.length > 0 ? await getLinkedDrafts(fbIds) : {};
+
   return (
     <FeedbackPage
       feedbacks={feedbacks.map((f) => ({
@@ -19,6 +22,7 @@ export default async function FeedbackPluginPage() {
         updatedAt: f.updatedAt.toISOString(),
         comments: f.comments.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() })),
       }))}
+      initialDrafts={linkedDrafts}
       canManage={canManage}
       currentUserId={session.id}
       users={users}

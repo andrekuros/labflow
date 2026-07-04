@@ -253,6 +253,37 @@ export async function rejectFeedbackDraft(draftId: string) {
   return { ok: true };
 }
 
+export async function getLinkedDrafts(feedbackIds: string[]) {
+  await requireUser();
+  const feedbacks = await prisma.feedback.findMany({
+    where: { id: { in: feedbackIds } },
+    select: { id: true, linkedDrafts: true },
+  });
+
+  const allDraftIds: string[] = [];
+  const fbToDrafts: Record<string, string[]> = {};
+  for (const fb of feedbacks) {
+    const ids = JSON.parse(fb.linkedDrafts || "[]") as string[];
+    fbToDrafts[fb.id] = ids;
+    allDraftIds.push(...ids);
+  }
+
+  if (allDraftIds.length === 0) return {};
+
+  const drafts = await prisma.aiDraft.findMany({
+    where: { id: { in: allDraftIds } },
+    select: { id: true, artifactType: true, title: true, payload: true, status: true, projectId: true },
+  });
+  const draftsById = Object.fromEntries(drafts.map((d) => [d.id, d]));
+
+  const result: Record<string, typeof drafts> = {};
+  for (const [fbId, ids] of Object.entries(fbToDrafts)) {
+    const resolved = ids.map((id) => draftsById[id]).filter(Boolean);
+    if (resolved.length > 0) result[fbId] = resolved;
+  }
+  return result;
+}
+
 export async function listActiveProjects() {
   await requireUser();
   return prisma.project.findMany({
