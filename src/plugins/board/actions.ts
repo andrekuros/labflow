@@ -44,6 +44,7 @@ export async function createTask(input: {
       assignees: input.assigneeIds?.length ? { connect: input.assigneeIds.map((id) => ({ id })) } : undefined,
       labels: input.labelIds?.length ? { connect: input.labelIds.map((id) => ({ id })) } : undefined,
     },
+    include: { assignees: true, labels: true, project: true },
   });
 
   await emit({
@@ -97,7 +98,7 @@ export async function updateTask(input: {
   if (!task) throw new Error("Tarefa nao encontrada");
   await authorize(task.projectId);
 
-  await prisma.task.update({
+  const updated = await prisma.task.update({
     where: { id: input.taskId },
     data: {
       title: input.title,
@@ -110,10 +111,12 @@ export async function updateTask(input: {
       assignees: input.assigneeIds ? { set: input.assigneeIds.map((id) => ({ id })) } : undefined,
       labels: input.labelIds ? { set: input.labelIds.map((id) => ({ id })) } : undefined,
     },
+    include: { assignees: true, labels: true, project: true },
   });
 
   await emit({ type: "task.updated", actorId: session.id, projectId: task.projectId, payload: { id: task.id, title: input.title ?? task.title, description: input.description ?? task.description } });
   revalidatePath("/board");
+  return updated;
 }
 
 export async function deleteTask(taskId: string) {

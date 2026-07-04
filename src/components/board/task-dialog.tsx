@@ -29,7 +29,7 @@ export function TaskDialog({
   sprints: SprintItem[];
   canWrite: Record<string, boolean>;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved: (action: "created" | "updated" | "deleted", task?: BoardTask) => void;
 }) {
   const editing = !!task;
   const [projectId, setProjectId] = useState(task?.projectId ?? defaultProjectId ?? projects[0]?.id ?? "");
@@ -51,35 +51,33 @@ export function TaskDialog({
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
+  function toBoardTask(t: { id: string; title: string; description: string | null; status: string; priority: string; dueDate: Date | null; projectId: string; sprintId: string | null; workPackageId: string | null; project: { key: string; color: string }; assignees: { id: string; name: string; avatarColor: string }[]; labels: { id: string; name: string; color: string }[] }): BoardTask {
+    return {
+      id: t.id, title: t.title, description: t.description, status: t.status,
+      priority: t.priority, dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+      projectId: t.projectId, projectKey: t.project.key, projectColor: t.project.color,
+      sprintId: t.sprintId, workPackageId: t.workPackageId,
+      assignees: t.assignees.map((a) => ({ id: a.id, name: a.name, avatarColor: a.avatarColor })),
+      labels: t.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+    };
+  }
+
   function save() {
     if (!title.trim() || !projectId) return;
     start(async () => {
       if (editing && task) {
-        await updateTask({
-          taskId: task.id,
-          title,
-          description: description || null,
-          priority,
-          status,
-          sprintId: sprintId || null,
-          dueDate: dueDate || null,
-          assigneeIds,
-          labelIds,
+        const res = await updateTask({
+          taskId: task.id, title, description: description || null, priority, status,
+          sprintId: sprintId || null, dueDate: dueDate || null, assigneeIds, labelIds,
         });
+        onSaved("updated", toBoardTask(res));
       } else {
-        await createTask({
-          projectId,
-          title,
-          description,
-          status,
-          priority,
-          sprintId: sprintId || null,
-          dueDate: dueDate || null,
-          assigneeIds,
-          labelIds,
+        const res = await createTask({
+          projectId, title, description, status, priority,
+          sprintId: sprintId || null, dueDate: dueDate || null, assigneeIds, labelIds,
         });
+        onSaved("created", toBoardTask(res));
       }
-      onSaved();
       onClose();
     });
   }
@@ -88,7 +86,7 @@ export function TaskDialog({
     if (!task) return;
     start(async () => {
       await deleteTask(task.id);
-      onSaved();
+      onSaved("deleted", task);
       onClose();
     });
   }

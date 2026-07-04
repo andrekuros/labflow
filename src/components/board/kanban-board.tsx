@@ -190,7 +190,15 @@ export function KanbanBoard({
           sprints={sprints}
           canWrite={canWrite}
           onClose={() => setDialog(null)}
-          onSaved={() => router.refresh()}
+          onSaved={(action, t) => {
+            if (action === "created" && t) {
+              setTasks((prev) => [...prev, t]);
+            } else if (action === "updated" && t) {
+              setTasks((prev) => prev.map((x) => (x.id === t.id ? t : x)));
+            } else if (action === "deleted" && t) {
+              setTasks((prev) => prev.filter((x) => x.id !== t.id));
+            }
+          }}
         />
       )}
     </div>
