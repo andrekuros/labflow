@@ -42,7 +42,7 @@ export async function createRequirement(input: {
       activities: input.activityIds?.length ? { connect: input.activityIds.map((id) => ({ id })) } : undefined,
     },
   });
-  await emit({ type: "requirement.created", actorId: session.id, projectId: input.projectId, payload: { id: r.id, title: r.title } });
+  await emit({ type: "requirement.created", actorId: session.id, projectId: input.projectId, targetId: r.id, payload: { id: r.id, title: r.title } });
   revalidatePath("/requirements");
   return r;
 }

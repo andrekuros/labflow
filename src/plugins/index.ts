@@ -42,6 +42,8 @@ import { feedbackManifest } from "@/plugins/feedback/manifest";
 import { handlers as feedbackApi } from "@/plugins/feedback/api";
 import { planningManifest } from "@/plugins/planning/manifest";
 import { handlers as planningApi } from "@/plugins/planning/api";
+import { reportsManifest } from "@/plugins/reports/manifest";
+import { handlers as reportsApi } from "@/plugins/reports/api";
 
 const BUILTIN_PLUGINS = [
   projectsManifest,
@@ -59,6 +61,7 @@ const BUILTIN_PLUGINS = [
   academicManifest,
   feedbackManifest,
   planningManifest,
+  reportsManifest,
   examplePlugin,
 ];
 
@@ -78,6 +81,7 @@ const API_REGISTRATIONS: [string, typeof teamApi][] = [
   ["academic", academicApi],
   ["feedback", feedbackApi],
   ["planning", planningApi],
+  ["reports", reportsApi],
 ];
 
 let loaded = false;

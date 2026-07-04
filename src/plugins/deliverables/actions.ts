@@ -31,7 +31,7 @@ export async function createDeliverable(input: {
     },
   });
 
-  await emit({ type: "deliverable.created", actorId: session.id, projectId: input.projectId, payload: { id: d.id, title: d.name, description: d.description } });
+  await emit({ type: "deliverable.created", actorId: session.id, projectId: input.projectId, targetId: d.id, payload: { id: d.id, title: d.name, description: d.description } });
   revalidatePath("/deliverables");
   return d;
 }
@@ -43,6 +43,6 @@ export async function setDeliverableStatus(id: string, status: string) {
   if (!d) return;
   if (!(await canWriteProject(session, d.projectId))) throw new Error("Sem permissao");
   await prisma.deliverable.update({ where: { id }, data: { status } });
-  await emit({ type: "deliverable.updated", actorId: session.id, projectId: d.projectId, payload: { id } });
+  await emit({ type: "deliverable.updated", actorId: session.id, projectId: d.projectId, targetId: id, payload: { id } });
   revalidatePath("/deliverables");
 }

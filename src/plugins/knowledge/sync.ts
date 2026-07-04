@@ -123,6 +123,7 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
           type: "article.updated",
           actorId: actorId ?? null,
           projectId: article.projectId,
+          targetId: article.id,
           payload: { id: article.id, title: article.title, content: article.content },
         });
         updated++;
@@ -134,6 +135,7 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
           type: "article.created",
           actorId: actorId ?? null,
           projectId: article.projectId,
+          targetId: article.id,
           payload: { id: article.id, title: article.title, content: article.content },
         });
         created++;

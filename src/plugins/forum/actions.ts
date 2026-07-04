@@ -28,7 +28,7 @@ export async function createThread(input: { channelId: string; title: string; co
       posts: { create: { authorId: session.id, content: input.content } },
     },
   });
-  await emit({ type: "thread.created", actorId: session.id, projectId: channel?.projectId ?? null, payload: { id: thread.id, title: input.title, content: input.content } });
+  await emit({ type: "thread.created", actorId: session.id, projectId: channel?.projectId ?? null, targetId: thread.id, payload: { id: thread.id, title: input.title, content: input.content } });
   revalidatePath("/forum");
   return thread;
 }
@@ -42,7 +42,7 @@ export async function createPost(input: { threadId: string; content: string }) {
   });
   const post = await prisma.post.create({ data: { threadId: input.threadId, authorId: session.id, content: input.content } });
   await prisma.thread.update({ where: { id: input.threadId }, data: { updatedAt: new Date() } });
-  await emit({ type: "post.created", actorId: session.id, projectId: thread?.channel.projectId ?? null, payload: { id: post.id, content: input.content } });
+  await emit({ type: "post.created", actorId: session.id, projectId: thread?.channel.projectId ?? null, targetId: post.id, payload: { id: post.id, content: input.content } });
 
   if (thread) {
     const recipientIds = new Set<string>();

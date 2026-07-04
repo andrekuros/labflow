@@ -470,11 +470,14 @@ model ActivityLog {
   type       String
   actorId    String?
   projectId  String?
+  targetId   String? // id of the affected entity (task, deliverable, etc.)
   payload    String   @default("{}") // JSON string
   createdAt  DateTime @default(now())
 
   @@index([projectId])
   @@index([type])
+  @@index([actorId, createdAt])
+  @@index([targetId])
 }
 
 model Plugin {

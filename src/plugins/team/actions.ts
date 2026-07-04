@@ -44,7 +44,7 @@ async function requireAdminSession() {
 export async function createUser(input: { name: string; email: string; password: string; role: string; title?: string }) {
   const session = await requireAdminSession();
   const user = await createUserRecord(input, "active");
-  await emit({ type: "user.created", actorId: session.id, payload: { id: user.id, name: user.name } });
+  await emit({ type: "user.created", actorId: session.id, targetId: user.id, payload: { id: user.id, name: user.name } });
   revalidatePath("/team");
   return user;
 }
@@ -123,7 +123,7 @@ export async function approveUser(userId: string, input?: { role?: string; title
   });
 
   await indexUser(userId).catch(() => {});
-  await emit({ type: "user.updated", actorId: session.id, payload: { id: userId } });
+  await emit({ type: "user.updated", actorId: session.id, targetId: userId, payload: { id: userId } });
   revalidatePath("/team");
 }
 
@@ -153,7 +153,7 @@ export async function updateUserProfile(
   if (input.title !== undefined) data.title = input.title || null;
 
   await prisma.user.update({ where: { id: userId }, data });
-  await emit({ type: "user.updated", actorId: session.id, payload: { id: userId } });
+  await emit({ type: "user.updated", actorId: session.id, targetId: userId, payload: { id: userId } });
   await indexUser(userId).catch(() => {});
   revalidatePath("/team");
   revalidatePath(`/team/${userId}`);
@@ -211,7 +211,7 @@ export async function importUsersFromCsv(csv: string): Promise<CsvImportResult> 
 
     try {
       const user = await createUserRecord({ name, email, password, role, title: title || undefined }, "active");
-      await emit({ type: "user.created", actorId: session.id, payload: { id: user.id, name: user.name } });
+      await emit({ type: "user.created", actorId: session.id, targetId: user.id, payload: { id: user.id, name: user.name } });
       result.created += 1;
     } catch (e) {
       result.errors.push(`Linha ${i + (hasHeader ? 2 : 1)}: ${e instanceof Error ? e.message : "erro"}`);

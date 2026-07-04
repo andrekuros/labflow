@@ -26,7 +26,7 @@ export async function acceptAiDraft(draftId: string, actorId: string) {
           source: draft.source === "ai" ? "ia" : "import",
         },
       });
-      await emit({ type: "requirement.created", actorId, projectId, payload: { id: r.id, title: r.title } });
+      await emit({ type: "requirement.created", actorId, projectId, targetId: r.id, payload: { id: r.id, title: r.title } });
       break;
     }
     case "task": {
@@ -40,7 +40,7 @@ export async function acceptAiDraft(draftId: string, actorId: string) {
           creatorId: actorId,
         },
       });
-      await emit({ type: "task.created", actorId, projectId, payload: { id: t.id, title: t.title } });
+      await emit({ type: "task.created", actorId, projectId, targetId: t.id, payload: { id: t.id, title: t.title } });
       break;
     }
     case "deliverable": {
@@ -54,7 +54,7 @@ export async function acceptAiDraft(draftId: string, actorId: string) {
           dueDate: data.dueDate ? new Date(String(data.dueDate)) : null,
         },
       });
-      await emit({ type: "deliverable.created", actorId, projectId, payload: { id: d.id, title: d.name } });
+      await emit({ type: "deliverable.created", actorId, projectId, targetId: d.id, payload: { id: d.id, title: d.name } });
       break;
     }
     case "work_package": {

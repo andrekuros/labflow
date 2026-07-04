@@ -28,7 +28,7 @@ export async function createArticle(input: { title: string; content: string; tag
       authorId: session.id,
     },
   });
-  await emit({ type: "article.created", actorId: session.id, projectId: a.projectId, payload: { id: a.id, title: a.title, content: a.content } });
+  await emit({ type: "article.created", actorId: session.id, projectId: a.projectId, targetId: a.id, payload: { id: a.id, title: a.title, content: a.content } });
   revalidatePath("/knowledge");
   return a;
 }
@@ -40,7 +40,7 @@ export async function updateArticle(input: { id: string; title: string; content:
     where: { id: input.id },
     data: { title: input.title, content: input.content, tags: input.tags ?? "" },
   });
-  await emit({ type: "article.updated", actorId: session.id, projectId: a.projectId, payload: { id: a.id, title: a.title, content: a.content } });
+  await emit({ type: "article.updated", actorId: session.id, projectId: a.projectId, targetId: a.id, payload: { id: a.id, title: a.title, content: a.content } });
   revalidatePath("/knowledge");
   return a;
 }

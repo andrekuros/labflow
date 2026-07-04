@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   GraduationCap,
   MessageSquareWarning,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +42,7 @@ const ICONS: Record<string, LucideIcon> = {
   ShieldCheck,
   GraduationCap,
   MessageSquareWarning,
+  BarChart3,
 };
 
 export function getNavIcon(name: string): LucideIcon {

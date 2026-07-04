@@ -31,7 +31,7 @@ export async function saveConops(projectId: string, data: ConopsData) {
     where: { id: projectId },
     data: { conops: JSON.stringify(data) },
   });
-  await emit({ type: "project.updated", projectId, payload: { id: projectId } });
+  await emit({ type: "project.updated", projectId, targetId: projectId, payload: { id: projectId } });
   revalidatePath(`/projects/${projectId}`);
 }
 

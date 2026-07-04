@@ -47,6 +47,7 @@ export async function submitFeedback(data: FeedbackInput) {
     type: "feedback.submitted",
     actorId: user.id,
     projectId: data.projectId || null,
+    targetId: fb.id,
     payload: { id: fb.id, title: fb.title, description: fb.description, category: fb.category, platformUrl: fb.platformUrl },
   });
 

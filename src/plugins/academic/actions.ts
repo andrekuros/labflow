@@ -86,7 +86,7 @@ export async function saveAcademicProfile(userId: string, data: AcademicFormData
   });
 
   await indexAcademicProfile(userId).catch(() => {});
-  await emit({ type: "academic.updated", actorId: session.id, payload: { userId } });
+  await emit({ type: "academic.updated", actorId: session.id, targetId: userId, payload: { userId } });
   revalidatePath("/academic");
 }
 

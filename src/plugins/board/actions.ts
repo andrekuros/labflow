@@ -51,6 +51,7 @@ export async function createTask(input: {
     type: "task.created",
     actorId: session.id,
     projectId: input.projectId,
+    targetId: task.id,
     payload: { id: task.id, title: task.title, description: task.description },
   });
 
@@ -74,6 +75,7 @@ export async function moveTask(input: { taskId: string; status: string; order: n
     type: "task.moved",
     actorId: session.id,
     projectId: task.projectId,
+    targetId: task.id,
     payload: { id: task.id, from: task.status, to: input.status },
   });
 
@@ -114,7 +116,7 @@ export async function updateTask(input: {
     include: { assignees: true, labels: true, project: true },
   });
 
-  await emit({ type: "task.updated", actorId: session.id, projectId: task.projectId, payload: { id: task.id, title: input.title ?? task.title, description: input.description ?? task.description } });
+  await emit({ type: "task.updated", actorId: session.id, projectId: task.projectId, targetId: task.id, payload: { id: task.id, title: input.title ?? task.title, description: input.description ?? task.description } });
   revalidatePath("/board");
   return updated;
 }

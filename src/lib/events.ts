@@ -32,6 +32,7 @@ export type DomainEvent = {
   type: DomainEventType;
   actorId?: string | null;
   projectId?: string | null;
+  targetId?: string | null;
   payload?: Record<string, unknown>;
 };
 
@@ -66,6 +67,7 @@ export async function emit(event: DomainEvent) {
         type: event.type,
         actorId: event.actorId ?? null,
         projectId: event.projectId ?? null,
+        targetId: event.targetId ?? null,
         payload: JSON.stringify(event.payload ?? {}),
       },
     });

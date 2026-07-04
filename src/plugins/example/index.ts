@@ -39,7 +39,7 @@ export const examplePlugin: PluginManifest = {
         const task = await prisma.task.create({
           data: { projectId, title, creatorId: ctx.userId, status: "backlog" },
         });
-        await emit({ type: "task.created", actorId: ctx.userId, projectId, payload: { id: task.id, title } });
+        await emit({ type: "task.created", actorId: ctx.userId, projectId, targetId: task.id, payload: { id: task.id, title } });
         return `Tarefa criada com sucesso: "${title}".`;
       },
     },

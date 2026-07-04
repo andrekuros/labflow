@@ -69,6 +69,10 @@ const PERMISSIONS: PermissionDef[] = [
   // verification
   { key: "verification:view", description: "Visualizar verificacao", module: "verification", action: "view" },
   { key: "verification:edit", description: "Editar verificacao", module: "verification", action: "edit" },
+  // report
+  { key: "report:view", description: "Visualizar proprio relatorio", module: "report", action: "view" },
+  { key: "report:view_all", description: "Visualizar relatorios de todos", module: "report", action: "view_all" },
+  { key: "report:export", description: "Exportar relatorios", module: "report", action: "export" },
 ];
 
 const ALL_KEYS = PERMISSIONS.map((p) => p.key);
@@ -92,6 +96,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     "roadmap:edit",
     "system_model:edit",
     "verification:edit",
+    "report:export",
   ],
   project_manager: [
     ...VIEW_KEYS,
@@ -108,6 +113,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     "roadmap:edit",
     "system_model:edit",
     "verification:edit",
+    "report:view_all", "report:export",
   ],
   contributor: [
     ...VIEW_KEYS,
