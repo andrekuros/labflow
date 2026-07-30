@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds, writableMap } from "@/lib/projects";
+import { workspaceProjectIds } from "@/lib/workspace";
+import { writableMap } from "@/lib/projects";
 import { Card, Badge, PageHeader, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { AddSprintForm } from "@/components/projects/project-forms";
@@ -8,7 +9,7 @@ import { SprintStatusControl } from "@/components/sprints/sprint-controls";
 
 export default async function SprintsPage() {
   const session = await requireUser();
-  const ids = await viewableProjectIds(session);
+  const ids = await workspaceProjectIds(session);
   if (ids.length === 0) return <EmptyState title="Nenhum projeto" description="Participe de um projeto para gerenciar sprints." />;
 
   const [projects, sprints, canWrite] = await Promise.all([

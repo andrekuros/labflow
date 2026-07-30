@@ -3,17 +3,10 @@ import { prisma } from "@/lib/db";
 import { hasPermission } from "@/lib/rbac";
 import type { SessionUser } from "@/lib/auth";
 
-/** Project ids the user can view (admins see all). */
-export async function viewableProjectIds(user: SessionUser): Promise<string[]> {
-  if (await hasPermission(user, "project:view")) {
-    const all = await prisma.project.findMany({ select: { id: true } });
-    return all.map((p) => p.id);
-  }
-  const memberships = await prisma.projectMembership.findMany({
-    where: { userId: user.id },
-    select: { projectId: true },
-  });
-  return memberships.map((m) => m.projectId);
+/** Todos os projetos do laboratorio sao visiveis a qualquer usuario autenticado. */
+export async function viewableProjectIds(_user: SessionUser): Promise<string[]> {
+  const all = await prisma.project.findMany({ select: { id: true } });
+  return all.map((p) => p.id);
 }
 
 /** Map of projectId -> can the user write. */
@@ -27,6 +20,8 @@ export async function writableMap(user: SessionUser, projectIds: string[]) {
     where: { userId: user.id, projectId: { in: projectIds } },
   });
   for (const id of projectIds) map[id] = false;
-  for (const m of memberships) map[m.projectId] = m.role === "lead" || m.role === "contributor";
+  for (const m of memberships) {
+    map[m.projectId] = m.role === "lead" || m.role === "contributor" || m.role === "coauthor";
+  }
   return map;
 }

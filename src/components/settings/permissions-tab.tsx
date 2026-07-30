@@ -7,19 +7,12 @@ import {
   getRolePermissionsAction,
   updateRolePermissionsAction,
 } from "@/app/actions/permissions";
+import { PROFILE_LABELS, SYSTEM_PROFILES } from "@/lib/profile-meta";
 
-const EDITABLE_ROLES = ["researcher", "project_manager", "contributor", "viewer"] as const;
-const ROLE_LABELS: Record<string, string> = {
-  researcher: "Pesquisador",
-  project_manager: "Gerente",
-  contributor: "Colaborador",
-  viewer: "Visualizador",
-};
-
-type PermRow = { id: string; key: string; description: string; module: string; action: string };
+const EDITABLE_PROFILES = SYSTEM_PROFILES.filter((p) => p !== "admin");
 
 export function PermissionsTab() {
-  const [perms, setPerms] = useState<PermRow[]>([]);
+  const [perms, setPerms] = useState<{ id: string; key: string; description: string; module: string; action: string }[]>([]);
   const [rolePerms, setRolePerms] = useState<Record<string, Set<string>>>({});
   const [pending, start] = useTransition();
   const [loaded, setLoaded] = useState(false);
@@ -30,8 +23,8 @@ export function PermissionsTab() {
       const [p, rp] = await Promise.all([listPermissionsAction(), getRolePermissionsAction()]);
       setPerms(p);
       const mapped: Record<string, Set<string>> = {};
-      for (const role of EDITABLE_ROLES) {
-        mapped[role] = new Set(rp[role] ?? []);
+      for (const profile of EDITABLE_PROFILES) {
+        mapped[profile] = new Set(rp[profile] ?? []);
       }
       setRolePerms(mapped);
       setLoaded(true);
@@ -42,20 +35,20 @@ export function PermissionsTab() {
 
   const modules = [...new Set(perms.map((p) => p.module))];
 
-  function toggle(role: string, key: string) {
+  function toggle(profile: string, key: string) {
     setSaved(false);
     setRolePerms((prev) => {
-      const s = new Set(prev[role]);
+      const s = new Set(prev[profile]);
       if (s.has(key)) s.delete(key);
       else s.add(key);
-      return { ...prev, [role]: s };
+      return { ...prev, [profile]: s };
     });
   }
 
   function saveAll() {
     start(async () => {
-      for (const role of EDITABLE_ROLES) {
-        await updateRolePermissionsAction(role, [...(rolePerms[role] ?? [])]);
+      for (const profile of EDITABLE_PROFILES) {
+        await updateRolePermissionsAction(profile, [...(rolePerms[profile] ?? [])]);
       }
       setSaved(true);
     });
@@ -63,9 +56,10 @@ export function PermissionsTab() {
 
   return (
     <Card className="p-5">
-      <h2 className="mb-1 text-sm font-semibold">Permissoes por papel</h2>
+      <h2 className="mb-1 text-sm font-semibold">Permissoes por perfil</h2>
       <p className="mb-4 text-sm text-muted">
-        Admin sempre tem acesso total. Configure as permissoes dos demais papeis.
+        Cada perfil define um conjunto de permissoes. Usuarios com varios perfis recebem a uniao de todos.
+        Administrador sempre tem acesso total.
       </p>
 
       <div className="overflow-x-auto">
@@ -74,9 +68,9 @@ export function PermissionsTab() {
             <tr className="border-b border-border">
               <th className="px-2 py-2 text-left font-medium text-muted">Modulo</th>
               <th className="px-2 py-2 text-left font-medium text-muted">Permissao</th>
-              {EDITABLE_ROLES.map((r) => (
-                <th key={r} className="px-2 py-2 text-center font-medium text-muted">
-                  {ROLE_LABELS[r]}
+              {EDITABLE_PROFILES.map((profile) => (
+                <th key={profile} className="min-w-[72px] px-1 py-2 text-center font-medium text-muted">
+                  {PROFILE_LABELS[profile]}
                 </th>
               ))}
             </tr>
@@ -94,12 +88,12 @@ export function PermissionsTab() {
                   <td className="px-2 py-1 text-muted" title={p.key}>
                     {p.description || p.key}
                   </td>
-                  {EDITABLE_ROLES.map((role) => (
-                    <td key={role} className="px-2 py-1 text-center">
+                  {EDITABLE_PROFILES.map((profile) => (
+                    <td key={profile} className="px-1 py-1 text-center">
                       <input
                         type="checkbox"
-                        checked={rolePerms[role]?.has(p.key) ?? false}
-                        onChange={() => toggle(role, p.key)}
+                        checked={rolePerms[profile]?.has(p.key) ?? false}
+                        onChange={() => toggle(profile, p.key)}
                       />
                     </td>
                   ))}

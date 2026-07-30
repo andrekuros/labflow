@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeScript } from "./theme-script";
 import { DEFAULT_MODE, DEFAULT_PALETTE } from "@/lib/themes";
+import { ChunkLoadRecovery } from "@/components/chunk-load-recovery";
 
 export const metadata: Metadata = {
   title: "LabFlow - Gestao de Laboratorio de Pesquisa",
@@ -19,7 +20,10 @@ export default function RootLayout({
       <head>
         <ThemeScript />
       </head>
-      <body>{children}</body>
+      <body>
+        <ChunkLoadRecovery />
+        {children}
+      </body>
     </html>
   );
 }

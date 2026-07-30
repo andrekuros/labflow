@@ -4,11 +4,11 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/ui";
 import { ThemePanel } from "@/components/settings/theme-panel";
+import { AccountForm } from "@/components/settings/account-form";
 import { MenuPreferencesForm } from "@/components/settings/menu-preferences-form";
 import {
   togglePluginAction,
   savePluginSettingsAction,
-  savePluginProjectSettingsAction,
   createApiKeyAction,
   deleteApiKeyAction,
   saveAiSettingsAction,
@@ -25,8 +25,12 @@ import type { SettingsField } from "@/plugins/types";
 import type { UserPreferences } from "@/lib/user-preferences";
 import type { NavItem } from "@/plugins/types";
 import { useTransition } from "react";
-import { Card, Badge, Button } from "@/components/ui";
+import { Card, Badge, Button, Input, Label, Textarea } from "@/components/ui";
 import { PermissionsTab } from "@/components/settings/permissions-tab";
+import { UsersTab } from "@/components/settings/users-tab";
+import { LabBrandingPanel } from "@/components/settings/lab-branding-panel";
+import { importProjectBundleAction } from "@/app/actions/data-transfer";
+import type { LabBranding } from "@/lib/lab-branding-shared";
 
 type PluginRow = {
   id: string;
@@ -46,8 +50,6 @@ type ApiKeyRow = {
   lastUsed: string | null;
   userName: string;
 };
-
-type ProjectRow = { id: string; key: string; name: string };
 
 type AiSettingsRow = {
   aiProvider: string;
@@ -69,6 +71,7 @@ type NextcloudSettingsRow = {
   autoSyncIntervalMinutes: number;
   folderProjectMapJson: string;
   excludeFoldersText: string;
+  adminOnlyFoldersText: string;
   lastSyncAt: string | null;
   lastSyncStatus: string | null;
   lastSyncMessage: string | null;
@@ -76,42 +79,48 @@ type NextcloudSettingsRow = {
   hasStoredPassword: boolean;
 };
 
-type TabId = "preferencias" | "permissoes" | "ia" | "conhecimento" | "plugins" | "integracoes" | "projetos";
+type TabId = "preferencias" | "laboratorio" | "usuarios" | "permissoes" | "ia" | "conhecimento" | "plugins" | "integracoes";
 
 const TABS: { id: TabId; label: string; adminOnly?: boolean }[] = [
   { id: "preferencias", label: "Preferencias" },
-  { id: "permissoes", label: "Permissoes", adminOnly: true },
+  { id: "laboratorio", label: "Laboratorio", adminOnly: true },
+  { id: "usuarios", label: "Usuarios", adminOnly: true },
+  { id: "permissoes", label: "Perfis e permissoes", adminOnly: true },
   { id: "ia", label: "IA", adminOnly: true },
   { id: "conhecimento", label: "Conhecimento", adminOnly: true },
   { id: "plugins", label: "Plugins", adminOnly: true },
   { id: "integracoes", label: "Integracoes", adminOnly: true },
-  { id: "projetos", label: "Projetos", adminOnly: true },
 ];
 
 export function SettingsClient({
   isAdmin,
+  account,
   navItems,
   preferences,
   plugins,
   apiKeys,
-  projects,
   aiSettings,
   nextcloudSettings,
+  labBranding,
 }: {
   isAdmin: boolean;
+  account: { name: string; email: string };
   navItems: NavItem[];
   preferences: UserPreferences;
   plugins: PluginRow[];
   apiKeys: ApiKeyRow[];
-  projects: ProjectRow[];
   aiSettings: AiSettingsRow;
   nextcloudSettings: NextcloudSettingsRow;
+  labBranding: LabBranding;
 }) {
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
   const [tab, setTab] = useState<TabId>("preferencias");
   const [pending, start] = useTransition();
   const [newKey, setNewKey] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [projectImportJson, setProjectImportJson] = useState("");
+  const [projectImportKey, setProjectImportKey] = useState("");
+  const [projectImportResult, setProjectImportResult] = useState("");
   const [drafts, setDrafts] = useState<Record<string, Record<string, unknown>>>(
     Object.fromEntries(plugins.map((p) => [p.id, { ...p.settings }])),
   );
@@ -123,7 +132,7 @@ export function SettingsClient({
         description={
           isAdmin
             ? "Preferencias pessoais, modulos, IA e integracoes do laboratorio."
-            : "Tema, aparência e personalizacao do menu."
+            : "Conta, tema, aparência e personalizacao do menu."
         }
       />
 
@@ -147,10 +156,15 @@ export function SettingsClient({
 
       {tab === "preferencias" && (
         <div className="space-y-6">
+          <AccountForm name={account.name} email={account.email} />
           <ThemePanel />
           <MenuPreferencesForm navItems={navItems} preferences={preferences} />
         </div>
       )}
+
+      {tab === "laboratorio" && isAdmin && <LabBrandingPanel initial={labBranding} />}
+
+      {tab === "usuarios" && isAdmin && <UsersTab />}
 
       {tab === "permissoes" && isAdmin && <PermissionsTab />}
 
@@ -276,25 +290,78 @@ export function SettingsClient({
           </Card>
 
           <Card className="p-5">
-            <h2 className="mb-2 text-sm font-semibold">Backup</h2>
-            <p className="mb-4 text-sm text-muted">
-              Exporta o banco SQLite e as configuracoes dos plugins em um arquivo <span className="font-mono text-xs">.tar.gz</span>.
+            <h2 className="mb-2 text-sm font-semibold">Backup completo</h2>
+            <p className="mb-2 text-sm text-muted">
+              Exporta o banco SQLite inteiro e as configuracoes dos plugins em um arquivo{" "}
+              <span className="font-mono text-xs">.tar.gz</span>. Inclui todos os dados da plataforma:
+              usuarios, projetos, tarefas, conhecimento, forum, publicacoes, embeddings RAG, RBAC e logs.
+            </p>
+            <p className="mb-4 text-xs text-muted">
+              Nao inclui variaveis de ambiente (<span className="font-mono">.env</span>) nem arquivos externos do Nextcloud
+              (apenas conteudo ja sincronizado no banco). Backups automaticos diarios em{" "}
+              <span className="font-mono text-xs">backups/</span> (padrao: 01:00, retencao 30 dias).
             </p>
             <a href="/api/admin/backup" className="inline-flex">
-              <Button size="sm" variant="outline">Baixar backup</Button>
+              <Button size="sm" variant="outline">Baixar backup completo</Button>
             </a>
           </Card>
-        </div>
-      )}
 
-      {tab === "projetos" && isAdmin && projects.length > 0 && (
-        <Card className="p-5">
-          <h2 className="mb-2 text-sm font-semibold">Configuracoes por projeto</h2>
-          <p className="mb-4 text-sm text-muted">
-            Overrides por projeto para plugins que suportam configuracao contextual (ex: colunas do Kanban).
-          </p>
-          <ProjectSettingsForm projects={projects} />
-        </Card>
+          <Card className="p-5">
+            <h2 className="mb-2 text-sm font-semibold">Importar projeto</h2>
+            <p className="mb-4 text-sm text-muted">
+              Restaura um pacote JSON exportado de outro servidor (Configuracoes do projeto ou backup parcial).
+              Importe os usuarios necessarios antes. Se a sigla ja existir, informe uma nova abaixo.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <Label>Nova sigla (opcional)</Label>
+                <Input
+                  value={projectImportKey}
+                  onChange={(e) => setProjectImportKey(e.target.value.toUpperCase())}
+                  placeholder="Ex: BIO2"
+                  maxLength={8}
+                />
+              </div>
+              <div>
+                <Label>JSON do projeto</Label>
+                <Textarea
+                  value={projectImportJson}
+                  onChange={(e) => setProjectImportJson(e.target.value)}
+                  rows={6}
+                  className="font-mono text-xs"
+                  placeholder='{"version":"1.0","kind":"project",...}'
+                />
+              </div>
+              {projectImportResult && <p className="text-sm text-brand">{projectImportResult}</p>}
+              <Button
+                size="sm"
+                disabled={pending || !projectImportJson.trim()}
+                onClick={() =>
+                  start(async () => {
+                    setProjectImportResult("");
+                    try {
+                      const r = await importProjectBundleAction(
+                        projectImportJson,
+                        projectImportKey || undefined,
+                      );
+                      setProjectImportResult(
+                        `Projeto ${r.projectKey} importado (${r.summary})${
+                          r.warnings.length ? `. Avisos: ${r.warnings.slice(0, 3).join("; ")}` : ""
+                        }`,
+                      );
+                      setProjectImportJson("");
+                      setProjectImportKey("");
+                    } catch (e) {
+                      setProjectImportResult(e instanceof Error ? e.message : "Erro na importacao");
+                    }
+                  })
+                }
+              >
+                Importar projeto
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
@@ -437,6 +504,7 @@ function NextcloudForm({
     nextcloudAutoSyncIntervalMinutes?: number;
     nextcloudFolderProjectMapJson?: string;
     nextcloudExcludeFolders?: string;
+    nextcloudAdminOnlyFolders?: string;
   }) => void;
   onTest: (data: {
     nextcloudUrl: string;
@@ -457,6 +525,7 @@ function NextcloudForm({
     initial.folderProjectMapJson || '{\n  "projetos/EEG": "EEG"\n}',
   );
   const [excludeFolders, setExcludeFolders] = useState(initial.excludeFoldersText || "templates");
+  const [adminOnlyFolders, setAdminOnlyFolders] = useState(initial.adminOnlyFoldersText || "admin");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [healthSummary, setHealthSummary] = useState<string | null>(null);
@@ -471,6 +540,7 @@ function NextcloudForm({
     nextcloudAutoSyncIntervalMinutes: autoSyncMinutes,
     nextcloudFolderProjectMapJson: folderMapJson,
     nextcloudExcludeFolders: excludeFolders,
+    nextcloudAdminOnlyFolders: adminOnlyFolders,
   });
 
   return (
@@ -535,6 +605,14 @@ function NextcloudForm({
           <input id="nc-exclude" type="text" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder="templates, rascunhos" value={excludeFolders} onChange={(e) => setExcludeFolders(e.target.value)} />
         </div>
 
+        <div>
+          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-admin">Pastas somente administradores</label>
+          <input id="nc-admin" type="text" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" placeholder="admin" value={adminOnlyFolders} onChange={(e) => setAdminOnlyFolders(e.target.value)} />
+          <p className="mt-1 text-[11px] text-muted">
+            Visiveis apenas para administradores no LabFlow e na busca/IA. No Nextcloud, restrinja o compartilhamento dessa pasta manualmente.
+          </p>
+        </div>
+
         <div className="md:col-span-2">
           <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-map">Mapeamento pasta → projeto (JSON)</label>
           <textarea id="nc-map" rows={5} className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={folderMapJson} onChange={(e) => setFolderMapJson(e.target.value)} placeholder='{"projetos/EEG": "EEG", "equipamentos": ""}' />
@@ -567,43 +645,6 @@ function NextcloudForm({
   );
 }
 
-function ProjectSettingsForm({ projects }: { projects: ProjectRow[] }) {
-  const [pending, start] = useTransition();
-  const [projectId, setProjectId] = useState(projects[0]?.id ?? "");
-  const [columns, setColumns] = useState('["backlog","todo","in_progress","review","done"]');
-
-  return (
-    <form
-      className="space-y-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!projectId) return;
-        let parsed: unknown;
-        try {
-          parsed = JSON.parse(columns);
-        } catch {
-          return;
-        }
-        start(() => savePluginProjectSettingsAction("board", projectId, { columns: parsed }));
-      }}
-    >
-      <div>
-        <label className="mb-1 block text-xs font-medium text-muted" htmlFor="project-select">Projeto</label>
-        <select id="project-select" className="h-9 w-full rounded-lg border border-border bg-surface2 px-3 text-sm" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.key} — {p.name}</option>
-          ))}
-        </select>
-      </div>
-      <div>
-        <label className="mb-1 block text-xs font-medium text-muted" htmlFor="board-columns">Colunas Kanban (plugin board)</label>
-        <textarea id="board-columns" className="min-h-20 w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={columns} onChange={(e) => setColumns(e.target.value)} />
-      </div>
-      <Button type="submit" size="sm" disabled={pending || !projectId}>Salvar override do projeto</Button>
-    </form>
-  );
-}
-
 function SettingsFieldInput({
   field,
   value,
@@ -617,10 +658,13 @@ function SettingsFieldInput({
 
   if (field.type === "boolean") {
     return (
-      <label className="flex items-center gap-2 text-sm" htmlFor={id}>
-        <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
-        {field.label}
-      </label>
+      <div>
+        <label className="flex items-center gap-2 text-sm" htmlFor={id}>
+          <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} />
+          {field.label}
+        </label>
+        {field.description && <p className="mt-1 text-xs text-muted">{field.description}</p>}
+      </div>
     );
   }
 

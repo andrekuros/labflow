@@ -1,0 +1,31 @@
+---
+description: Convenções centrais do LabFlow — stack, RBAC, eventos e escopo de mudanças
+alwaysApply: true
+---
+
+# LabFlow — Core
+
+Plataforma Next.js 15 + Prisma + plugins. Leia `AGENTS.md` para mapa completo.
+
+## Princípios
+
+- Mudanças mínimas e focadas; não refatorar código não relacionado
+- Match convenções existentes (naming, imports `@/`, Tailwind, Lucide icons)
+- Server Actions: `"use server"`, autenticar antes de mutar
+- Após mutations: `emit()` com tipo `entidade.acao` de `src/lib/events.ts`
+- Permissões: `hasPermission(user, "modulo:acao", projectId?)` — não hardcodar roles exceto `admin`
+- Prisma enums = String; JSON fields = String com parse
+
+## Papéis
+
+Globais: `admin`, `researcher`, `project_manager`, `contributor`, `viewer`.
+Projeto: `lead`, `contributor`, `viewer` (membership).
+Acadêmico: `AcademicProfile.program` (phd, msc, etc.) — não confundir com `User.role`.
+
+## Plugins
+
+Todo módulo vive em `src/plugins/<id>/`. Registrar em `src/plugins/index.ts` e ícone em `nav-icons.tsx`.
+
+## Comandos úteis
+
+`npm run typecheck` | `npm run lint` | `npm run dev`

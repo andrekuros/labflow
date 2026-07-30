@@ -7,7 +7,7 @@ type DocArticle = { title: string; tags: string; content: string };
 const DEV_SKILLS: DocArticle[] = [
   {
     title: "LabFlow — Visao Geral da Arquitetura",
-    tags: "dev,arquitetura,skill",
+    tags: "dev,arquitetura,skill,cursor",
     content: `# Visao Geral da Arquitetura do LabFlow
 
 ## Stack Tecnologica
@@ -15,39 +15,40 @@ const DEV_SKILLS: DocArticle[] = [
 - **Linguagem:** TypeScript
 - **ORM:** Prisma (SQLite em dev, PostgreSQL em producao)
 - **Autenticacao:** JWT via cookies httpOnly (jose + bcryptjs)
-- **UI:** Tailwind CSS + componentes customizados (sem biblioteca de componentes externa)
-- **IA:** OpenAI API / Ollama local + RAG com embeddings locais
+- **UI:** Tailwind CSS + componentes customizados
+- **IA:** OpenAI / Ollama / offline + RAG com embeddings
+
+## Documentacao para IA (Cursor)
+- \`AGENTS.md\` — guia principal para agentes
+- \`docs/CURSOR.md\` — como usar Cursor neste repo
+- \`.cursor/rules/\` — regras automaticas
+- \`.cursor/skills/\` — skills labflow-dev, labflow-plugin, labflow-ai
+
+## Modulos (plugins)
+projects, board, planning, sprints, roadmap, deliverables, requirements, system-model, verification, knowledge, forum, assistant, team, academic, reports, feedback.
 
 ## Estrutura de Pastas
 \`\`\`
 src/
   app/           → App Router (paginas, layouts, rotas API)
   components/    → Componentes React reutilizaveis
-  lib/           → Logica de negocio, utilitarios, auth, RBAC, eventos
-  plugins/       → Modulos do sistema (cada plugin = manifest + actions + page)
-  server/        → Bootstrap do servidor
-prisma/
-  schema.prisma  → Schema do banco de dados
+  lib/           → Auth, RBAC, eventos, IA, utilitarios
+  plugins/       → Modulos (manifest + actions + page + api)
+  server/        → Bootstrap (RAG, plugins, schedulers)
+prisma/schema.prisma
 \`\`\`
 
-## Conceitos Principais
+## Event Bus
+\`src/lib/events.ts\` — pub/sub in-process. Mutacoes emitem \`task.created\`, \`article.updated\`, etc. Subscribers: RAG, activity log, plugins, feedback agent.
 
-### Sistema de Plugins
-Cada modulo do LabFlow e um plugin com:
-- **Manifest** (\`manifest.ts\`): metadata, icone, navegacao, settings schema
-- **Actions** (\`actions.ts\`): server actions ("use server") para logica de negocio
-- **Page** (\`page.tsx\`): server component para renderizacao SSR
-- **API** (\`api.ts\`): handlers REST para integracao externa
-- **Client Components** (\`src/components/\`): componentes React client-side
+## RBAC
+\`hasPermission(user, "modulo:acao", projectId?)\` em \`src/lib/rbac.ts\`.
+Papeis globais: admin, researcher, project_manager, contributor, viewer.
+Papeis de projeto: lead, contributor, viewer (membership).
+Conhecimento: \`src/lib/knowledge-access.ts\` (visibilidade por projeto; Nextcloud read-only).
 
-### Event Bus
-O \`src/lib/events.ts\` e um pub/sub in-process. Eventos como \`task.created\`, \`project.updated\` sao emitidos e consumidos por subscribers (RAG, logs, notificacoes).
-
-### RBAC
-O controle de acesso usa \`hasPermission(user, permKey, projectId?)\` em \`src/lib/rbac.ts\`. Permissoes sao por modulo+acao e configuraveis pelo admin.
-
-### RAG (Retrieval-Augmented Generation)
-Artigos, tarefas, projetos e perfis sao indexados como embeddings. O assistente de IA busca contexto relevante antes de responder.
+## RAG
+Artigos, tarefas, projetos, perfis indexados em embeddings. Assistente em \`/assistant\`. Config: .env AI_* ou Configuracoes > IA.
 `,
   },
   {
@@ -104,6 +105,36 @@ Importar manifest e api handlers, adicionar aos arrays.
 
 ### 7. Icone (\`src/plugins/nav-icons.tsx\`)
 Importar e registrar o icone Lucide correspondente.
+
+### 8. Permissoes (\`src/lib/permissions-seed.ts\`)
+Adicionar chaves \`modulo:acao\` e defaults por papel.
+
+Veja skill Cursor \`labflow-plugin\` e plugin de referencia \`src/plugins/reports/\`.
+`,
+  },
+  {
+    title: "LabFlow — Modulos Recentes",
+    tags: "dev,modulos,skill",
+    content: `# Modulos Recentes do LabFlow
+
+## Planejamento (\`/planning\`)
+Visao unificada por projeto: requisitos, entregaveis, roadmap e sprints.
+Plugin: \`src/plugins/planning/\`. Depende de \`projects\`.
+
+## Relatorios (\`/reports\`)
+Relatorios de atividade por usuario/periodo e painel BI para admins.
+Permissoes: \`report:view\`, \`report:view_all\`, \`report:export\`.
+Plugin: \`src/plugins/reports/\`.
+
+## Conhecimento — Links e Nextcloud
+- \`KnowledgeLink\`: vincula artigos a tasks, deliverables, requirements
+- Actions: \`src/plugins/knowledge/link-actions.ts\`
+- Nextcloud: sync .md read-only; editar no vault externo
+- Setting \`ragScanLimit\`: limite de chunks na busca semantica
+
+## Feedback + Agente IA
+Feedback em \`/feedback\` dispara \`feedback.submitted\` → \`feedback-agent.ts\` gera drafts.
+Configure projeto destino em Configuracoes > Plugins > Feedback.
 `,
   },
   {
@@ -128,9 +159,11 @@ Importar e registrar o icone Lucide correspondente.
 
 ## RBAC
 - Usar \`hasPermission(user, "modulo:acao", projectId?)\` para verificacoes
-- \`requirePermission("modulo:acao")\` redireciona automaticamente
-- Admin sempre tem acesso total (hardcoded)
-- Leads de projeto herdam permissoes de project_manager dentro do projeto
+- \`requirePermission("modulo:acao", projectId?)\` redireciona automaticamente
+- Admin sempre tem acesso total
+- Lead de projeto herda permissoes de project_manager no projeto
+- Legacy: \`canWriteProject\` / \`canViewProject\` ainda usados em alguns modulos
+- Conhecimento: \`canViewArticle\`, \`canEditArticle\` em knowledge-access.ts
 
 ## Eventos
 - Emitir eventos para toda mutacao significativa

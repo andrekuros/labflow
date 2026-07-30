@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds, writableMap } from "@/lib/projects";
+import { workspaceProjectIds } from "@/lib/workspace";
+import { writableMap } from "@/lib/projects";
 import { PageHeader } from "@/components/ui";
 import { RequirementsView } from "@/components/planning/requirements-view";
 import { TraceabilityMatrix } from "@/components/planning/traceability-matrix";
@@ -13,7 +14,7 @@ export default async function RequirementsPage({
 }) {
   const session = await requireUser();
   const { view } = await searchParams;
-  const ids = await viewableProjectIds(session);
+  const ids = await workspaceProjectIds(session);
   if (ids.length === 0) {
     return <EmptyState title="Nenhum projeto" description="Participe de um projeto para definir requisitos." />;
   }

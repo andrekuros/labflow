@@ -28,6 +28,7 @@ const TYPE_LABELS: Record<ArtifactType, string> = {
   milestone: "Marcos",
   system_element: "Elementos do sistema",
   verification_case: "Casos V&V",
+  sprint_plan: "Plano de sprint",
 };
 
 type GenerationMode = "complement" | "replace_pending" | "append";
@@ -198,6 +199,7 @@ export function ConopsPanel({
                       if (result.skipped > 0) parts.push(`${result.skipped} duplicata(s) ignorada(s)`);
                       if (result.rejectedPending > 0) parts.push(`${result.rejectedPending} rascunho(s) pendente(s) substituido(s)`);
                       setInfo(parts.join(" · "));
+                      router.push(`/projects/${projectId}?tab=review`);
                     }
                   } catch (e) {
                     setError(e instanceof Error ? e.message : "Erro na geracao");

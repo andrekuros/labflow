@@ -40,16 +40,27 @@ export function bootstrap() {
 
 export async function bootstrapAsync() {
   bootstrap();
+  // Always refresh manifests so nav label/group changes apply without full restart
+  registerBuiltinPlugins();
   await initPluginRegistry();
   const { startNextcloudAutoSync } = await import("@/plugins/knowledge/auto-sync");
   startNextcloudAutoSync();
   const { startDueDateNotifier } = await import("@/lib/notification-scheduler");
   startDueDateNotifier();
+  const { startBackupScheduler } = await import("@/lib/backup-scheduler");
+  startBackupScheduler();
   const { ensureArtifactsFormatArticle } = await import("@/lib/artifacts/ensure-doc");
   await ensureArtifactsFormatArticle();
-  const { seedPermissions, migrateRoles } = await import("@/lib/permissions-seed");
+  const { ensureProjectBundleFormatArticle } = await import("@/lib/data-transfer/ensure-doc");
+  await ensureProjectBundleFormatArticle();
+  const { seedPermissions, migrateRoles, migrateUserProfiles } = await import("@/lib/permissions-seed");
   await seedPermissions();
+  await migrateUserProfiles();
   await migrateRoles();
+  const { migrateAcademicAndPublicationsToProjects } = await import("@/lib/migrate-academic-to-projects");
+  await migrateAcademicAndPublicationsToProjects();
+  const { ensureAcademicMethodologyArticle } = await import("@/lib/academic/methodology-seed");
+  await ensureAcademicMethodologyArticle();
   const { ensureDocArticles } = await import("@/lib/docs-seed");
   void ensureDocArticles();
   void ensureKnowledgeIndexed();

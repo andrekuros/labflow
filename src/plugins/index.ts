@@ -36,14 +36,18 @@ import { systemModelManifest } from "@/plugins/system-model/manifest";
 import { handlers as systemModelApi } from "@/plugins/system-model/api";
 import { verificationManifest } from "@/plugins/verification/manifest";
 import { handlers as verificationApi } from "@/plugins/verification/api";
-import { academicManifest } from "@/plugins/academic/manifest";
-import { handlers as academicApi } from "@/plugins/academic/api";
+import { thesisManifest } from "@/plugins/thesis/manifest";
+import { handlers as thesisApi } from "@/plugins/thesis/api";
+import { papersManifest } from "@/plugins/papers/manifest";
+import { handlers as papersApi } from "@/plugins/papers/api";
 import { feedbackManifest } from "@/plugins/feedback/manifest";
 import { handlers as feedbackApi } from "@/plugins/feedback/api";
 import { planningManifest } from "@/plugins/planning/manifest";
 import { handlers as planningApi } from "@/plugins/planning/api";
 import { reportsManifest } from "@/plugins/reports/manifest";
 import { handlers as reportsApi } from "@/plugins/reports/api";
+import { activityLogManifest } from "@/plugins/activity-log/manifest";
+import { handlers as activityLogApi } from "@/plugins/activity-log/api";
 
 const BUILTIN_PLUGINS = [
   projectsManifest,
@@ -58,10 +62,12 @@ const BUILTIN_PLUGINS = [
   forumManifest,
   assistantManifest,
   teamManifest,
-  academicManifest,
+  thesisManifest,
+  papersManifest,
   feedbackManifest,
   planningManifest,
   reportsManifest,
+  activityLogManifest,
   examplePlugin,
 ];
 
@@ -78,21 +84,23 @@ const API_REGISTRATIONS: [string, typeof teamApi][] = [
   ["projects", projectsApi],
   ["board", boardApi],
   ["assistant", assistantApi],
-  ["academic", academicApi],
+  ["thesis", thesisApi],
+  ["papers", papersApi],
   ["feedback", feedbackApi],
   ["planning", planningApi],
   ["reports", reportsApi],
+  ["activity-log", activityLogApi],
 ];
 
 let loaded = false;
 
 export function registerBuiltinPlugins() {
-  if (loaded) return;
-  loaded = true;
-
   for (const manifest of BUILTIN_PLUGINS) {
     registerPlugin(manifest);
   }
+
+  if (loaded) return;
+  loaded = true;
 
   for (const [id, handlers] of API_REGISTRATIONS) {
     registerApiHandlers(id, handlers);

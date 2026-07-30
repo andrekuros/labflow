@@ -13,6 +13,7 @@ export type NextcloudSettings = {
   autoSyncIntervalMinutes: number;
   folderProjectMap: FolderProjectMap;
   excludeFolders: string[];
+  adminOnlyFolders: string[];
   lastSyncAt: string | null;
   lastSyncStatus: string | null;
   lastSyncMessage: string | null;
@@ -21,6 +22,24 @@ export type NextcloudSettings = {
 
 const MASK = "__MASKED__";
 const DEFAULT_EXCLUDE = ["templates"];
+const DEFAULT_ADMIN_ONLY = ["admin"];
+
+function parseFolderList(raw: unknown, fallback: string[]): string[] {
+  if (Array.isArray(raw)) return raw.map(String).map((s) => s.trim()).filter(Boolean);
+  if (typeof raw === "string") {
+    const parsed = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    return parsed.length > 0 ? parsed : fallback;
+  }
+  return [...fallback];
+}
+
+function parseExcludeFolders(raw: unknown): string[] {
+  return parseFolderList(raw, DEFAULT_EXCLUDE);
+}
+
+function parseAdminOnlyFolders(raw: unknown): string[] {
+  return parseFolderList(raw, DEFAULT_ADMIN_ONLY);
+}
 
 export function maskNextcloudPassword(pw: string): string {
   return pw ? MASK : "";
@@ -39,14 +58,6 @@ function parseFolderProjectMap(raw: unknown): FolderProjectMap {
   return out;
 }
 
-function parseExcludeFolders(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
-  if (typeof raw === "string") {
-    return raw.split(",").map((s) => s.trim()).filter(Boolean);
-  }
-  return [...DEFAULT_EXCLUDE];
-}
-
 export async function getNextcloudSettings(): Promise<NextcloudSettings> {
   const s = getPluginSettings("knowledge");
   return {
@@ -59,6 +70,7 @@ export async function getNextcloudSettings(): Promise<NextcloudSettings> {
     autoSyncIntervalMinutes: Number(s.nextcloudAutoSyncIntervalMinutes ?? 60),
     folderProjectMap: parseFolderProjectMap(s.nextcloudFolderProjectMap),
     excludeFolders: parseExcludeFolders(s.nextcloudExcludeFolders ?? DEFAULT_EXCLUDE),
+    adminOnlyFolders: parseAdminOnlyFolders(s.nextcloudAdminOnlyFolders ?? DEFAULT_ADMIN_ONLY),
     lastSyncAt: s.nextcloudLastSyncAt ? String(s.nextcloudLastSyncAt) : null,
     lastSyncStatus: s.nextcloudLastSyncStatus ? String(s.nextcloudLastSyncStatus) : null,
     lastSyncMessage: s.nextcloudLastSyncMessage ? String(s.nextcloudLastSyncMessage) : null,
@@ -74,6 +86,7 @@ export async function getNextcloudSettingsForUi() {
     hasStoredPassword: Boolean(s.appPassword),
     folderProjectMapJson: JSON.stringify(s.folderProjectMap, null, 2),
     excludeFoldersText: s.excludeFolders.join(", "),
+    adminOnlyFoldersText: s.adminOnlyFolders.join(", "),
   };
 }
 

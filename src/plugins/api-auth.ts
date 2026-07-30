@@ -3,6 +3,8 @@ import { createHash, randomBytes } from "crypto";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
 import type { SessionUser } from "@/lib/auth";
+import { getUserProfileKeys } from "@/lib/user-profiles";
+import { legacyRoleToProfiles, primaryProfile } from "@/lib/profile-meta";
 
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? "insecure-dev-secret-change-me",
@@ -36,21 +38,27 @@ export async function authenticateApiRequest(
         where: { id: row.id },
         data: { lastUsed: new Date() },
       });
+      const profiles = await getUserProfileKeys(row.user.id);
       return {
         id: row.user.id,
         email: row.user.email,
         name: row.user.name,
-        role: row.user.role,
+        role: primaryProfile(profiles),
+        profiles,
       };
     }
 
     try {
       const { payload } = await jwtVerify(token, secret);
+      const profiles = Array.isArray(payload.profiles)
+        ? (payload.profiles as string[])
+        : legacyRoleToProfiles(payload.role as string);
       return {
         id: payload.id as string,
         email: payload.email as string,
         name: payload.name as string,
-        role: payload.role as string,
+        role: primaryProfile(profiles),
+        profiles,
       };
     } catch {
       return null;

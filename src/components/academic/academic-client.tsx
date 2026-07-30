@@ -2,47 +2,53 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Sparkles, ChevronDown, ChevronUp, BookOpen, Loader2, FileText, Copy, Check } from "lucide-react";
 import { Button, Card, Input, Textarea, Select, Label, Badge } from "@/components/ui";
-import { saveAcademicProfile, type AcademicFormData, type CourseRow, type PendingRow } from "@/plugins/academic/actions";
-
-const EMPTY: AcademicFormData = {
-  program: "msc",
-  status: "active",
-  motivation: "",
-  objective: "",
-  problemStatement: "",
-  hypothesis: "",
-  methodology: "",
-  academicContribution: "",
-  expectedResults: "",
-  limitations: "",
-  theoreticalFramework: "",
-  advisorName: "",
-  coAdvisorName: "",
-  startDate: "",
-  expectedDefenseDate: "",
-  courses: [],
-  pending: [],
-  notes: "",
-};
+import { MarkdownView } from "@/components/markdown/markdown-view";
+import { ACADEMIC_PROGRAM_TYPE_LABELS, academicProgramTypeLabel } from "@/lib/academic-program-meta";
+import { ACADEMIC_TEXT_FIELDS, METHODOLOGY_INTRO } from "@/lib/academic/fields";
+import type { AcademicFinalReport } from "@/lib/academic/report";
+import type { AcademicFieldReview, AcademicReviewFieldKey, AcademicReviews } from "@/lib/academic/reviews";
+import {
+  saveAcademicProfile,
+  reviewAcademicField,
+  reviewAllAcademicFields,
+  generateAcademicFinalReport,
+  type AcademicFormData,
+  type CourseRow,
+  type PendingRow,
+} from "@/plugins/academic/actions";
 
 export function AcademicProfileForm({
   userId,
   userName,
   initial,
+  initialReviews,
+  initialReport,
   writable,
+  canEditProgram = false,
 }: {
   userId: string;
   userName: string;
   initial: AcademicFormData;
+  initialReviews: AcademicReviews;
+  initialReport: AcademicFinalReport | null;
   writable: boolean;
+  canEditProgram?: boolean;
 }) {
   const router = useRouter();
   const [data, setData] = useState<AcademicFormData>(initial);
+  const [reviews, setReviews] = useState<AcademicReviews>(initialReviews);
+  const [report, setReport] = useState<AcademicFinalReport | null>(initialReport);
+  const [reportOpen, setReportOpen] = useState(Boolean(initialReport));
+  const [copied, setCopied] = useState(false);
+  const [reviewingField, setReviewingField] = useState<AcademicReviewFieldKey | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
   const [pending, start] = useTransition();
+  const [reviewAllPending, startReviewAll] = useTransition();
+  const [reportPending, startReport] = useTransition();
 
   const setField = <K extends keyof AcademicFormData>(key: K, value: AcademicFormData[K]) => {
     setData((d) => ({ ...d, [key]: value }));
@@ -51,6 +57,22 @@ export function AcademicProfileForm({
   const addCourse = () => setField("courses", [...data.courses, { code: "", name: "", status: "pendente" }]);
   const addPending = () => setField("pending", [...data.pending, { title: "", kind: "disciplina", status: "pendente" }]);
 
+  const runFieldReview = (field: AcademicReviewFieldKey) => {
+    setReviewingField(field);
+    start(async () => {
+      setError("");
+      const result = await reviewAcademicField(userId, field, data);
+      setReviewingField(null);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (result.review) {
+        setReviews((r) => ({ ...r, [field]: result.review }));
+      }
+    });
+  };
+
   return (
     <Card className="p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -58,16 +80,148 @@ export function AcademicProfileForm({
           <h2 className="text-sm font-semibold">{userName}</h2>
           <p className="text-xs text-muted">Metodologia cientifica e acompanhamento do programa.</p>
         </div>
-        <Badge className="bg-surface2 text-muted">{data.program === "phd" ? "Doutorado" : "Mestrado"}</Badge>
+        <Badge className="bg-surface2 text-muted">{academicProgramTypeLabel(data.program)}</Badge>
       </div>
+
+      <div className="mb-4 rounded-lg border border-border bg-surface2/50">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-2 p-3 text-left"
+          onClick={() => setGuideOpen((o) => !o)}
+        >
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <BookOpen size={16} className="text-brand" />
+            Como preencher — Metodologia Cientifica
+          </span>
+          {guideOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </button>
+        {guideOpen && (
+          <div className="space-y-3 border-t border-border px-3 pb-3 pt-2 text-xs text-muted">
+            <p>{METHODOLOGY_INTRO}</p>
+            <ul className="list-disc space-y-2 pl-4">
+              {ACADEMIC_TEXT_FIELDS.map((f) => (
+                <li key={f.key}>
+                  <span className="font-medium text-fg">{f.label}:</span> {f.hint}
+                </li>
+              ))}
+            </ul>
+            <p className="text-[11px]">
+              O guia completo esta na base de conhecimento: &quot;Metodologia Cientifica — Guia para Pesquisa Academica&quot;.
+              Use &quot;Analisar com IA&quot; em cada campo e depois &quot;Gerar relatorio final&quot; para uma sintese consolidada.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={reviewAllPending || reviewingField !== null || reportPending}
+          onClick={() =>
+            startReviewAll(async () => {
+              setError("");
+              setInfo("");
+              const result = await reviewAllAcademicFields(userId, data);
+              if (result.error) {
+                setError(result.error);
+                return;
+              }
+              if (result.reviews) setReviews(result.reviews);
+              setInfo("Analise de todos os campos concluida.");
+            })
+          }
+        >
+          {reviewAllPending ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          Analisar todos os campos
+        </Button>
+        <Button
+          size="sm"
+          disabled={reportPending || reviewAllPending || reviewingField !== null}
+          onClick={() =>
+            startReport(async () => {
+              setError("");
+              setInfo("");
+              const result = await generateAcademicFinalReport(userId, data);
+              if (result.error) {
+                setError(result.error);
+                return;
+              }
+              if (result.report) {
+                setReport(result.report);
+                setReportOpen(true);
+                setInfo("Relatorio final gerado.");
+              }
+            })
+          }
+        >
+          {reportPending ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+          Gerar relatorio final
+        </Button>
+      </div>
+
+      {report && (
+        <div className="mb-4 rounded-lg border border-border">
+          <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-sm font-medium"
+              onClick={() => setReportOpen((o) => !o)}
+            >
+              <FileText size={16} className="text-brand" />
+              Relatorio final da proposta
+              <Badge className="bg-surface2 text-muted text-[10px]">
+                {report.reviewer === "offline" ? "offline" : "IA"}
+              </Badge>
+              {reportOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-muted">
+                {new Date(report.generatedAt).toLocaleString("pt-BR")}
+              </span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(report.markdown);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+              >
+                {copied ? <Check size={12} /> : <Copy size={12} />}
+                Copiar
+              </Button>
+            </div>
+          </div>
+          {reportOpen && (
+            <div className="max-h-[32rem] overflow-y-auto border-t border-border p-4 text-sm">
+              <MarkdownView content={report.markdown} />
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div>
           <Label>Programa</Label>
-          <Select value={data.program} disabled={!writable} onChange={(e) => setField("program", e.target.value)} className="w-full">
-            <option value="msc">Mestrado</option>
-            <option value="phd">Doutorado</option>
+          <Select
+            value={data.program}
+            disabled={!writable || !canEditProgram}
+            onChange={(e) => setField("program", e.target.value)}
+            className="w-full"
+          >
+            {(Object.keys(ACADEMIC_PROGRAM_TYPE_LABELS) as (keyof typeof ACADEMIC_PROGRAM_TYPE_LABELS)[]).map((key) => (
+              <option key={key} value={key}>
+                {ACADEMIC_PROGRAM_TYPE_LABELS[key]}
+              </option>
+            ))}
           </Select>
+          {writable && !canEditProgram && (
+            <p className="mt-1 text-xs text-muted">
+              Definido pelo perfil do usuario (Equipe ou Configuracoes). Alteracoes aqui nao mudam o programa.
+            </p>
+          )}
         </div>
         <div>
           <Label>Status</Label>
@@ -83,30 +237,20 @@ export function AcademicProfileForm({
         <div><Label>Previsao de defesa</Label><Input type="date" value={data.expectedDefenseDate} disabled={!writable} onChange={(e) => setField("expectedDefenseDate", e.target.value)} /></div>
       </div>
 
-      <div className="mt-4 space-y-3">
-        {(
-          [
-            ["motivation", "Motivacao", 3],
-            ["objective", "Objetivo", 2],
-            ["problemStatement", "Problema de pesquisa", 3],
-            ["hypothesis", "Hipotese", 2],
-            ["methodology", "Metodologia", 4],
-            ["theoreticalFramework", "Referencial teorico", 3],
-            ["academicContribution", "Contribuicao academica", 3],
-            ["expectedResults", "Resultado esperado", 3],
-            ["limitations", "Limitacoes", 2],
-            ["notes", "Notas gerais", 2],
-          ] as const
-        ).map(([key, label, rows]) => (
-          <div key={key}>
-            <Label>{label}</Label>
-            <Textarea
-              rows={rows}
-              value={data[key]}
-              disabled={!writable}
-              onChange={(e) => setField(key, e.target.value)}
-            />
-          </div>
+      <div className="mt-4 space-y-4">
+        {ACADEMIC_TEXT_FIELDS.map((field) => (
+          <MethodologyField
+            key={field.key}
+            label={field.label}
+            hint={field.hint}
+            rows={field.rows}
+            value={data[field.key]}
+            review={reviews[field.key]}
+            writable={writable}
+            reviewing={reviewingField === field.key}
+            onChange={(v) => setField(field.key, v)}
+            onReview={() => runFieldReview(field.key)}
+          />
         ))}
       </div>
 
@@ -185,6 +329,54 @@ export function AcademicProfileForm({
   );
 }
 
+function MethodologyField({
+  label,
+  hint,
+  rows,
+  value,
+  review,
+  writable,
+  reviewing,
+  onChange,
+  onReview,
+}: {
+  label: string;
+  hint: string;
+  rows: number;
+  value: string;
+  review?: AcademicFieldReview;
+  writable: boolean;
+  reviewing: boolean;
+  onChange: (v: string) => void;
+  onReview: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-3">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <Label>{label}</Label>
+        <Button size="sm" variant="ghost" disabled={reviewing} onClick={onReview} className="h-7 text-xs">
+          {reviewing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+          Analisar com IA
+        </Button>
+      </div>
+      <p className="mb-2 text-[11px] text-muted">{hint}</p>
+      <Textarea rows={rows} value={value} disabled={!writable} onChange={(e) => onChange(e.target.value)} />
+      {review && (
+        <div className="mt-2 rounded-md border border-brand/20 bg-brand/5 p-2.5">
+          <p className="mb-1 flex items-center gap-1.5 text-[11px] font-medium text-brand">
+            <Sparkles size={12} />
+            Observacao {review.reviewer === "offline" ? "(modo offline)" : "da IA"}
+          </p>
+          <p className="text-xs leading-relaxed text-fg">{review.observation}</p>
+          <p className="mt-1 text-[10px] text-muted">
+            {new Date(review.reviewedAt).toLocaleString("pt-BR")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CourseRowEditor({
   row,
   writable,
@@ -246,54 +438,4 @@ function PendingRowEditor({
       {writable && <Button size="sm" variant="ghost" onClick={onRemove}><Trash2 size={14} /></Button>}
     </div>
   );
-}
-
-export function profileToForm(profile: {
-  program: string;
-  status: string;
-  motivation: string;
-  objective: string;
-  problemStatement: string;
-  hypothesis: string;
-  methodology: string;
-  academicContribution: string;
-  expectedResults: string;
-  limitations: string;
-  theoreticalFramework: string;
-  advisorName: string | null;
-  coAdvisorName: string | null;
-  startDate: Date | null;
-  expectedDefenseDate: Date | null;
-  coursesJson: string;
-  pendingJson: string;
-  notes: string;
-}): AcademicFormData {
-  let courses: CourseRow[] = [];
-  let pending: PendingRow[] = [];
-  try {
-    courses = JSON.parse(profile.coursesJson);
-    pending = JSON.parse(profile.pendingJson);
-  } catch {
-    /* ignore */
-  }
-  return {
-    program: profile.program,
-    status: profile.status,
-    motivation: profile.motivation,
-    objective: profile.objective,
-    problemStatement: profile.problemStatement,
-    hypothesis: profile.hypothesis,
-    methodology: profile.methodology,
-    academicContribution: profile.academicContribution,
-    expectedResults: profile.expectedResults,
-    limitations: profile.limitations,
-    theoreticalFramework: profile.theoreticalFramework,
-    advisorName: profile.advisorName ?? "",
-    coAdvisorName: profile.coAdvisorName ?? "",
-    startDate: profile.startDate?.toISOString().slice(0, 10) ?? "",
-    expectedDefenseDate: profile.expectedDefenseDate?.toISOString().slice(0, 10) ?? "",
-    courses,
-    pending,
-    notes: profile.notes,
-  };
 }

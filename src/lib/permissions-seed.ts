@@ -48,6 +48,17 @@ const PERMISSIONS: PermissionDef[] = [
   { key: "academic:view", description: "Visualizar proprio perfil academico", module: "academic", action: "view" },
   { key: "academic:edit", description: "Editar proprio perfil academico", module: "academic", action: "edit" },
   { key: "academic:view_all", description: "Visualizar todos os perfis academicos", module: "academic", action: "view_all" },
+  // publications
+  { key: "publications:view", description: "Visualizar artigos (legado / papers)", module: "publications", action: "view" },
+  { key: "publications:create", description: "Criar artigos", module: "publications", action: "create" },
+  { key: "publications:edit", description: "Editar artigos", module: "publications", action: "edit" },
+  { key: "publications:delete", description: "Excluir artigos", module: "publications", action: "delete" },
+  { key: "papers:view", description: "Visualizar artigos como projetos", module: "papers", action: "view" },
+  { key: "papers:create", description: "Criar projetos de artigo", module: "papers", action: "create" },
+  { key: "papers:edit", description: "Editar projetos de artigo", module: "papers", action: "edit" },
+  { key: "thesis:view", description: "Visualizar teses e dissertacoes", module: "thesis", action: "view" },
+  { key: "thesis:create", description: "Criar teses e dissertacoes", module: "thesis", action: "create" },
+  { key: "thesis:edit", description: "Editar teses e dissertacoes", module: "thesis", action: "edit" },
   // team
   { key: "team:view", description: "Visualizar equipe", module: "team", action: "view" },
   { key: "team:manage", description: "Gerenciar usuarios", module: "team", action: "manage" },
@@ -73,6 +84,8 @@ const PERMISSIONS: PermissionDef[] = [
   { key: "report:view", description: "Visualizar proprio relatorio", module: "report", action: "view" },
   { key: "report:view_all", description: "Visualizar relatorios de todos", module: "report", action: "view_all" },
   { key: "report:export", description: "Exportar relatorios", module: "report", action: "export" },
+  // activity log
+  { key: "activity_log:view", description: "Visualizar registro global de atividades", module: "activity_log", action: "view" },
 ];
 
 const ALL_KEYS = PERMISSIONS.map((p) => p.key);
@@ -91,6 +104,9 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     "forum:create", "forum:edit",
     "sprint:create", "sprint:edit",
     "academic:edit",
+    "publications:create", "publications:edit",
+    "papers:create", "papers:edit",
+    "thesis:create", "thesis:edit",
     "feedback:create",
     "assistant:use",
     "roadmap:edit",
@@ -108,6 +124,7 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     "forum:create", "forum:edit",
     "sprint:create", "sprint:edit", "sprint:delete",
     "academic:edit", "academic:view_all",
+    "publications:create", "publications:edit", "publications:delete",
     "feedback:create", "feedback:manage",
     "assistant:use",
     "roadmap:edit",
@@ -121,12 +138,92 @@ const ROLE_DEFAULTS: Record<string, string[]> = {
     "knowledge:create",
     "forum:create",
     "academic:edit",
+    "publications:create", "publications:edit",
+    "papers:create", "papers:edit",
+    "thesis:create", "thesis:edit",
     "feedback:create",
     "assistant:use",
   ],
   viewer: [
     ...VIEW_KEYS,
     "feedback:create",
+  ],
+  msc: [
+    ...VIEW_KEYS,
+    "task:create", "task:edit",
+    "knowledge:create", "knowledge:edit",
+    "forum:create", "forum:edit",
+    "academic:edit",
+    "publications:create", "publications:edit",
+    "papers:create", "papers:edit",
+    "thesis:create", "thesis:edit",
+    "feedback:create",
+    "assistant:use",
+    "report:export",
+  ],
+  phd: [
+    ...VIEW_KEYS,
+    "project:create", "project:edit",
+    "task:create", "task:edit",
+    "requirement:create", "requirement:edit",
+    "deliverable:create", "deliverable:edit",
+    "knowledge:create", "knowledge:edit",
+    "forum:create", "forum:edit",
+    "sprint:create", "sprint:edit",
+    "academic:edit",
+    "publications:create", "publications:edit",
+    "papers:create", "papers:edit",
+    "thesis:create", "thesis:edit",
+    "feedback:create",
+    "assistant:use",
+    "roadmap:edit",
+    "system_model:edit",
+    "verification:edit",
+    "report:export",
+  ],
+  postdoc: [
+    ...VIEW_KEYS,
+    "project:edit",
+    "task:create", "task:edit",
+    "requirement:create", "requirement:edit",
+    "deliverable:create", "deliverable:edit",
+    "knowledge:create", "knowledge:edit",
+    "forum:create", "forum:edit",
+    "academic:edit", "academic:view_all",
+    "feedback:create",
+    "assistant:use",
+    "roadmap:edit",
+    "verification:edit",
+    "report:export",
+  ],
+  professor: [
+    ...VIEW_KEYS,
+    "project:create", "project:edit",
+    "task:create", "task:edit",
+    "requirement:create", "requirement:edit",
+    "deliverable:create", "deliverable:edit",
+    "knowledge:create", "knowledge:edit", "knowledge:delete",
+    "forum:create", "forum:edit",
+    "sprint:create", "sprint:edit",
+    "academic:edit", "academic:view_all",
+    "feedback:create", "feedback:manage",
+    "assistant:use",
+    "roadmap:edit",
+    "system_model:edit",
+    "verification:edit",
+    "report:view_all", "report:export",
+  ],
+  student: [
+    ...VIEW_KEYS,
+    "task:create", "task:edit",
+    "knowledge:create",
+    "forum:create",
+    "academic:edit",
+    "publications:create", "publications:edit",
+    "papers:create", "papers:edit",
+    "thesis:create", "thesis:edit",
+    "feedback:create",
+    "assistant:use",
   ],
 };
 
@@ -155,6 +252,25 @@ export async function seedPermissions() {
       if (!existing) {
         await prisma.rolePermission.create({ data: { role, permissionId: permId } });
       }
+    }
+  }
+}
+
+/**
+ * Garante UserProfile para cada usuario a partir de User.role (idempotente).
+ */
+export async function migrateUserProfiles() {
+  const { legacyRoleToProfiles, normalizeProfiles, setUserProfiles } = await import("@/lib/user-profiles");
+  const { primaryProfile } = await import("@/lib/profile-meta");
+  const users = await prisma.user.findMany({ select: { id: true, role: true } });
+  for (const user of users) {
+    const count = await prisma.userProfile.count({ where: { userId: user.id } });
+    if (count > 0) continue;
+    const profiles = normalizeProfiles(legacyRoleToProfiles(user.role));
+    await setUserProfiles(user.id, profiles);
+    const primary = primaryProfile(profiles);
+    if (primary !== user.role) {
+      await prisma.user.update({ where: { id: user.id }, data: { role: primary } });
     }
   }
 }

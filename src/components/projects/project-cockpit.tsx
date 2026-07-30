@@ -1,12 +1,22 @@
 import Link from "next/link";
 import { Card, Badge } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
-import { BookOpen, MessageSquare, PackageCheck, ListTodo, Zap, Cpu, ShieldCheck } from "lucide-react";
+import { BookOpen, MessageSquare, PackageCheck, ListTodo, Zap, Cpu, ShieldCheck, TrendingUp } from "lucide-react";
+
+type ProjectProgress = {
+  progressPct: number;
+  doneTasks: number;
+  totalTasks: number;
+  doneWeight: number;
+  totalWeight: number;
+  unmappedTasks: number;
+};
 
 type CockpitProps = {
   project: { id: string; key: string; name: string; color: string };
   activeSprint: { id: string; name: string; goal: string | null; endDate: string | null } | null;
   openTasks: number;
+  projectProgress?: ProjectProgress;
   deliverables: { id: string; name: string; status: string; dueDate: string | null }[];
   articles: { id: string; title: string; externalSource: string | null; updatedAt: string }[];
   threads: { id: string; title: string; status: string; updatedAt: string }[];
@@ -27,6 +37,7 @@ export function ProjectCockpit({
   project,
   activeSprint,
   openTasks,
+  projectProgress,
   deliverables,
   articles,
   threads,
@@ -57,6 +68,40 @@ export function ProjectCockpit({
         ) : (
           <p className="text-sm text-muted">Nenhuma sprint ativa.</p>
         )}
+      </Card>
+
+      <Card className="p-4">
+        <div className="mb-2 flex items-center gap-2 text-muted">
+          <TrendingUp size={15} />
+          <span className="text-xs font-semibold uppercase tracking-wide">Progresso</span>
+        </div>
+        {projectProgress && projectProgress.totalTasks > 0 ? (
+          <>
+            <p className="text-2xl font-semibold">{projectProgress.progressPct}%</p>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface2">
+              <div
+                className="h-full rounded-full bg-brand transition-all"
+                style={{ width: `${projectProgress.progressPct}%` }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              {projectProgress.doneTasks}/{projectProgress.totalTasks} tarefas
+              {projectProgress.totalWeight > 0 && (
+                <> · {Math.round(projectProgress.doneWeight)}h/{Math.round(projectProgress.totalWeight)}h</>
+              )}
+            </p>
+            {projectProgress.unmappedTasks > 0 && (
+              <p className="mt-1 text-xs text-amber-500">
+                {projectProgress.unmappedTasks} tarefa(s) sem WBS
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-muted">Sem tarefas no projeto.</p>
+        )}
+        <Link href={`/projects/${project.id}?tab=tasks`} className="mt-2 inline-block text-xs text-brand hover:underline">
+          Ver tarefas
+        </Link>
       </Card>
 
       <Card className="p-4">

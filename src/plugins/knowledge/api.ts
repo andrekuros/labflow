@@ -3,6 +3,7 @@ import { jsonOk, jsonError } from "@/plugins/api-utils";
 import type { PluginApiHandlers } from "@/plugins/types";
 import { searchKnowledge } from "@/plugins/knowledge/actions";
 import { syncNextcloudKnowledge } from "@/plugins/knowledge/sync";
+import { isAdminUser } from "@/lib/user-access";
 import { articleVisibilityWhere, canViewArticle } from "@/lib/knowledge-access";
 
 export const handlers: PluginApiHandlers = {
@@ -33,13 +34,13 @@ export const handlers: PluginApiHandlers = {
   },
 
   "POST /sync-nextcloud": async ({ user }) => {
-    if (user.role !== "admin") return jsonError("Sem permissao", 403);
+    if (!isAdminUser(user)) return jsonError("Sem permissao", 403);
     const result = await syncNextcloudKnowledge(user.id);
     return jsonOk(result);
   },
 
   "GET /health": async ({ user }) => {
-    if (user.role !== "admin") return jsonError("Sem permissao", 403);
+    if (!isAdminUser(user)) return jsonError("Sem permissao", 403);
     const { computeKnowledgeHealth } = await import("@/plugins/knowledge/health");
     return jsonOk(await computeKnowledgeHealth());
   },

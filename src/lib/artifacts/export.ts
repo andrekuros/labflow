@@ -8,7 +8,10 @@ export async function exportProjectArtifacts(projectId: string): Promise<Artifac
   const [requirements, tasks, deliverables, workPackages, milestones, systemElements, verificationCases] =
     await Promise.all([
       prisma.requirement.findMany({ where: { projectId } }),
-      prisma.task.findMany({ where: { projectId }, include: { assignees: { select: { email: true } } } }),
+      prisma.task.findMany({
+        where: { projectId },
+        include: { assignees: { select: { email: true } }, workPackage: { select: { code: true } } },
+      }),
       prisma.deliverable.findMany({ where: { projectId } }),
       prisma.workPackage.findMany({ where: { projectId } }),
       prisma.milestone.findMany({ where: { projectId } }),
@@ -39,7 +42,8 @@ export async function exportProjectArtifacts(projectId: string): Promise<Artifac
       description: t.description,
       status: t.status,
       priority: t.priority,
-      workPackageCode: null,
+      estimate: t.estimate,
+      workPackageCode: t.workPackage?.code ?? null,
     })),
     deliverables: deliverables.map((d) => ({
       name: d.name,
@@ -54,7 +58,7 @@ export async function exportProjectArtifacts(projectId: string): Promise<Artifac
       name: w.name,
       description: w.description,
       status: w.status,
-      parentRef: null,
+      parentRef: w.parentId,
     })),
     milestones: milestones.map((m) => ({
       name: m.name,

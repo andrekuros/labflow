@@ -74,6 +74,7 @@ export const knowledgeManifest: PluginManifest = {
     nextcloudAutoSyncIntervalMinutes: 60,
     nextcloudFolderProjectMap: {},
     nextcloudExcludeFolders: ["templates"],
+    nextcloudAdminOnlyFolders: ["admin"],
     nextcloudLastSyncAt: null,
     nextcloudLastSyncStatus: null,
     nextcloudLastSyncMessage: null,

@@ -23,22 +23,24 @@ export async function getSettingsData() {
   await requireAdmin();
   await ensurePluginRegistry();
   return listPlugins().map((p) => {
-    const settings = { ...p.settings };
-    if (p.manifest.id === "assistant" && settings.aiApiKey) {
+    // Prefer live manifest so new settingsSchema fields appear without full restart
+    const live = getPlugin(p.manifest.id)?.manifest ?? p.manifest;
+    const settings = { ...(live.defaultSettings ?? {}), ...p.settings };
+    if (live.id === "assistant" && settings.aiApiKey) {
       settings.aiApiKey = "__MASKED__";
     }
-    if (p.manifest.id === "knowledge" && settings.nextcloudAppPassword) {
+    if (live.id === "knowledge" && settings.nextcloudAppPassword) {
       settings.nextcloudAppPassword = "__MASKED__";
     }
     return {
-      id: p.manifest.id,
-      name: p.manifest.name,
-      description: p.manifest.description ?? "",
-      version: p.manifest.version,
+      id: live.id,
+      name: live.name,
+      description: live.description ?? "",
+      version: live.version,
       enabled: p.enabled,
       settings,
-      settingsSchema: p.manifest.settingsSchema ?? [],
-      requires: p.manifest.requires ?? [],
+      settingsSchema: live.settingsSchema ?? [],
+      requires: live.requires ?? [],
       order: p.order,
     };
   });

@@ -1,9 +1,13 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { emit } from "@/lib/events";
+import { requirePermission, requireUser, hasPermission } from "@/lib/rbac";
+import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
+import { labelForEvent } from "@/lib/activity-log/constants";
 
 export type UserActivitySummary = {
-  user: { id: string; name: string; email: string; role: string; title: string | null };
+  user: { id: string; name: string; email: string; role: string; profilesLabel: string };
   period: { from: string; to: string };
   kpis: {
     tasksCreated: number;
@@ -38,30 +42,13 @@ export type TeamMemberOverview = {
   id: string;
   name: string;
   role: string;
-  title: string | null;
+  profilesLabel: string;
   avatarColor: string;
   tasksCompleted: number;
   tasksTotal: number;
   deliverablesAccepted: number;
   totalEvents: number;
   lastEventAt: string | null;
-};
-
-const EVENT_LABELS: Record<string, string> = {
-  "task.created": "Tarefa criada",
-  "task.updated": "Tarefa atualizada",
-  "task.moved": "Tarefa movida",
-  "deliverable.created": "Entregavel criado",
-  "deliverable.updated": "Entregavel atualizado",
-  "requirement.created": "Requisito criado",
-  "article.created": "Artigo criado",
-  "article.updated": "Artigo atualizado",
-  "thread.created": "Topico criado",
-  "post.created": "Post no forum",
-  "project.created": "Projeto criado",
-  "project.updated": "Projeto atualizado",
-  "feedback.submitted": "Feedback enviado",
-  "academic.updated": "Perfil academico atualizado",
 };
 
 export async function getUserActivitySummary(
@@ -71,8 +58,18 @@ export async function getUserActivitySummary(
 ): Promise<UserActivitySummary> {
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true, title: true },
+    select: { id: true, name: true, email: true, role: true, profiles: { select: { profile: true } } },
   });
+  const profiles = user.profiles.length
+    ? normalizeProfiles(user.profiles.map((p) => p.profile))
+    : legacyRoleToProfiles(user.role);
+  const userSummary = {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    profilesLabel: formatProfilesLabel(profiles),
+  };
 
   const [events, tasks, deliverables, academicProfile] = await Promise.all([
     prisma.activityLog.findMany({
@@ -171,7 +168,7 @@ export async function getUserActivitySummary(
   const timeline = events.slice(0, 50).map((e) => ({
     id: e.id,
     type: e.type,
-    label: EVENT_LABELS[e.type] ?? e.type,
+    label: labelForEvent(e.type),
     projectKey: e.projectId ? (projectMap.get(e.projectId)?.key ?? null) : null,
     createdAt: e.createdAt.toISOString(),
   }));
@@ -183,7 +180,7 @@ export async function getUserActivitySummary(
   });
 
   return {
-    user,
+    user: userSummary,
     period: { from: from.toISOString(), to: to.toISOString() },
     kpis,
     tasksByProject,
@@ -197,7 +194,13 @@ export async function getUserActivitySummary(
 export async function getTeamOverview(from: Date, to: Date): Promise<TeamMemberOverview[]> {
   const users = await prisma.user.findMany({
     where: { accountStatus: "active" },
-    select: { id: true, name: true, role: true, title: true, avatarColor: true },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      avatarColor: true,
+      profiles: { select: { profile: true } },
+    },
     orderBy: { name: "asc" },
   });
 
@@ -236,11 +239,14 @@ export async function getTeamOverview(from: Date, to: Date): Promise<TeamMemberO
 
   return users.map((u) => {
     const ts = tasksByUser.get(u.id) ?? { total: 0, completed: 0, accepted: 0 };
+    const profiles = u.profiles.length
+      ? normalizeProfiles(u.profiles.map((p) => p.profile))
+      : legacyRoleToProfiles(u.role);
     return {
       id: u.id,
       name: u.name,
       role: u.role,
-      title: u.title,
+      profilesLabel: formatProfilesLabel(profiles),
       avatarColor: u.avatarColor,
       tasksCompleted: ts.completed,
       tasksTotal: ts.total,
@@ -249,5 +255,149 @@ export async function getTeamOverview(from: Date, to: Date): Promise<TeamMemberO
       lastEventAt: lastEventMap.get(u.id) ?? null,
     };
   });
+}
+
+export async function generateWeeklyReportNow(options?: {
+  format?: "pdf" | "markdown" | "both";
+  sendEmail?: boolean;
+  from?: string;
+  to?: string;
+  aiSections?: import("@/plugins/reports/ai-sections").AiAnalysisSection[];
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  filename?: string;
+  pdfBase64?: string;
+  markdown?: string;
+  markdownFilename?: string;
+  emailed?: boolean;
+  recipients?: string[];
+  aiUsed?: boolean;
+}> {
+  const user = await requirePermission("report:view_all");
+  const { runWeeklyLabReport } = await import("@/plugins/reports/weekly/run");
+  const format = options?.format ?? "both";
+  const sendEmail = options?.sendEmail === true;
+  return runWeeklyLabReport({
+    actorId: user.id,
+    sendEmail,
+    includePdfBase64: format === "pdf" || format === "both" || sendEmail,
+    includeMarkdown: format === "markdown" || format === "both",
+    format: sendEmail ? "both" : format,
+    from: options?.from ? new Date(options.from) : undefined,
+    to: options?.to ? new Date(`${options.to}T23:59:59.999`) : undefined,
+    aiSections: options?.aiSections,
+  });
+}
+
+export async function exportActivityReport(options: {
+  userId: string;
+  from: string;
+  to: string;
+  format: "pdf" | "markdown" | "both";
+  aiSections?: import("@/plugins/reports/ai-sections").AiAnalysisSection[];
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  filename?: string;
+  pdfBase64?: string;
+  markdown?: string;
+  markdownFilename?: string;
+  aiUsed?: boolean;
+}> {
+  const session = await requireUser();
+  const canAll = await hasPermission(session, "report:view_all");
+  const targetUserId = canAll ? options.userId : session.id;
+  if (!canAll && options.userId !== session.id) {
+    return { ok: false, error: "Sem permissao" };
+  }
+
+  try {
+    const from = new Date(options.from);
+    const to = new Date(`${options.to}T23:59:59.999`);
+    const summary = await getUserActivitySummary(targetUserId, from, to);
+    const { generateActivityAiNarrative } = await import("@/plugins/reports/activity-ai");
+    const { generateActivityReportPdf } = await import("@/plugins/reports/activity-pdf");
+    const { generateReportMarkdown } = await import("@/plugins/reports/report-markdown");
+
+    const narrative = await generateActivityAiNarrative(summary, options.aiSections);
+    const slug = summary.user.name.replace(/\s+/g, "-").toLowerCase();
+    const dateKey = options.from;
+    const wantPdf = options.format === "pdf" || options.format === "both";
+    const wantMd = options.format === "markdown" || options.format === "both";
+
+    const pdf = wantPdf ? await generateActivityReportPdf(summary, narrative) : null;
+    const markdown = wantMd ? generateReportMarkdown(summary, narrative) : undefined;
+
+    return {
+      ok: true,
+      filename: pdf ? `relatorio-${slug}-${dateKey}.pdf` : undefined,
+      pdfBase64: pdf ? pdf.toString("base64") : undefined,
+      markdown,
+      markdownFilename: markdown ? `relatorio-${slug}-${dateKey}.md` : undefined,
+      aiUsed: narrative.aiUsed,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Falha ao exportar" };
+  }
+}
+
+export async function exportLabPresentation(options: {
+  from: string;
+  to: string;
+  aiSections?: import("@/plugins/reports/ai-sections").AiAnalysisSection[];
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  filename?: string;
+  pdfBase64?: string;
+  aiUsed?: boolean;
+}> {
+  const user = await requirePermission("report:view_all");
+  try {
+    const from = new Date(options.from);
+    const to = new Date(`${options.to}T23:59:59.999`);
+    const { collectWeeklyLabReportData } = await import("@/plugins/reports/weekly/data");
+    const { generateWeeklyNarrative } = await import("@/plugins/reports/weekly/agent");
+    const { generateLabPresentationPdf } = await import("@/plugins/reports/presentation-pdf");
+    const { getLabBranding } = await import("@/lib/lab-branding");
+
+    const data = await collectWeeklyLabReportData(from, to);
+    const narrative = await generateWeeklyNarrative(
+      data,
+      options.aiSections?.length
+        ? options.aiSections
+        : [
+            "executiveSummary",
+            "highlights",
+            "pendenciesAndRisks",
+            "workflowImprovements",
+            "otherSuggestions",
+          ],
+    );
+    const branding = await getLabBranding();
+    const pdf = await generateLabPresentationPdf(data, narrative, branding.name);
+    const filename = `labflow-apresentacao-${options.from}.pdf`;
+
+    await emit({
+      type: "report.weekly_sent",
+      actorId: user.id,
+      payload: {
+        kind: "presentation",
+        from: from.toISOString(),
+        to: to.toISOString(),
+        aiUsed: narrative.aiUsed,
+      },
+    });
+
+    return {
+      ok: true,
+      filename,
+      pdfBase64: pdf.toString("base64"),
+      aiUsed: narrative.aiUsed,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Falha ao gerar apresentacao" };
+  }
 }
 

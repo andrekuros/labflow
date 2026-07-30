@@ -13,8 +13,10 @@ import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Card, Badge, Avatar, LinkButton } from "@/components/ui";
 import { ROLES, UserProfileEditor } from "@/components/team/team-client";
+import { DeleteUserButton } from "@/components/team/delete-user-button";
 import { canManageUserProfiles } from "@/lib/user-access";
 import { formatDate, daysUntil } from "@/lib/utils";
+import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
 import { PRIORITIES } from "@/components/board/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -34,11 +36,12 @@ const PROJECT_ROLE: Record<string, string> = {
 export default async function MemberPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await requireUser();
-  const isAdmin = canManageUserProfiles(session.role);
+  const isAdmin = canManageUserProfiles(session);
 
   const user = await prisma.user.findUnique({
     where: { id },
     include: {
+      profiles: { select: { profile: true } },
       memberships: { include: { project: true }, orderBy: { project: { name: "asc" } } },
       assignedTasks: {
         include: { project: true, labels: true, sprint: true },
@@ -50,6 +53,8 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
 
   if (!user) notFound();
   if (!isAdmin && user.accountStatus !== "active") notFound();
+
+  const isSelf = session.id === user.id;
 
   const activeTasks = user.assignedTasks.filter((t) => t.status !== "done");
   const doneTasks = user.assignedTasks.filter((t) => t.status === "done");
@@ -65,13 +70,19 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
     count: user.assignedTasks.filter((t) => t.status === status).length,
   }));
 
+  const profilesLabel = formatProfilesLabel(
+    user.profiles.length
+      ? normalizeProfiles(user.profiles.map((p) => p.profile))
+      : legacyRoleToProfiles(user.role),
+  );
+
   return (
     <div>
       <Link href="/team" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
         <ArrowLeft size={15} /> Equipe
       </Link>
 
-      {isAdmin && <UserProfileEditor userId={user.id} role={user.role} title={user.title} />}
+      {isAdmin && <UserProfileEditor userId={user.id} role={user.role} />}
 
       <div className="mb-6 flex flex-wrap items-start gap-5">
         <Avatar name={user.name} color={user.avatarColor} size="lg" />
@@ -80,12 +91,15 @@ export default async function MemberPage({ params }: { params: Promise<{ id: str
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">{user.name}</h1>
               <p className="mt-1 text-sm text-muted">
-                {[user.title, ROLES[user.role] ?? user.role, user.email].filter(Boolean).join(" · ")}
+                {[profilesLabel, user.email].filter(Boolean).join(" · ")}
               </p>
             </div>
             <LinkButton href={`/board?assignee=${user.id}`}>
               <KanbanSquare size={16} /> Ver no Kanban
             </LinkButton>
+            {isAdmin && !isSelf && (
+              <DeleteUserButton userId={user.id} userName={user.name} redirectTo="/settings" />
+            )}
           </div>
           <p className="text-xs text-muted">
             Membro desde {formatDate(user.createdAt)} · {user._count.createdTasks} tarefas criadas ·{" "}

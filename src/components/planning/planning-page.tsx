@@ -19,6 +19,7 @@ import {
 } from "@/components/deliverables/deliverable-forms";
 import { SprintStatusControl } from "@/components/sprints/sprint-controls";
 import { AddSprintForm } from "@/components/projects/project-forms";
+import { SprintAiWizard } from "@/components/sprints/sprint-ai-wizard";
 import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
 import { TraceabilityMatrix } from "@/components/planning/traceability-matrix";
 import { REQ_LEVEL } from "@/lib/se/constants";
@@ -57,6 +58,13 @@ type Sprint = {
   project: { key: string; color: string };
   tasksDone: number; tasksTotal: number;
 };
+type SprintMember = {
+  userId: string;
+  name: string;
+  role: string;
+  profilesLabel: string;
+  openTaskCount: number;
+};
 type WorkPackage = { id: string; name: string; code: string | null; projectId: string };
 
 const TABS = [
@@ -84,6 +92,9 @@ export function PlanningPage({
   showSprintsOnRoadmap,
   reqApproved,
   reqTotal,
+  sprintMembers,
+  sprintCount,
+  defaultDurationWeeks,
 }: {
   projects: Project[];
   selectedProjectId: string;
@@ -100,6 +111,9 @@ export function PlanningPage({
   showSprintsOnRoadmap: boolean;
   reqApproved: number;
   reqTotal: number;
+  sprintMembers: SprintMember[];
+  sprintCount: number;
+  defaultDurationWeeks: number;
 }) {
   const router = useRouter();
   const tab = (TABS.find((t) => t.id === initialTab)?.id ?? "requirements") as TabId;
@@ -189,6 +203,9 @@ export function PlanningPage({
           project={proj}
           sprints={sprints}
           canWrite={canWrite}
+          sprintMembers={sprintMembers}
+          sprintCount={sprintCount}
+          defaultDurationWeeks={defaultDurationWeeks}
         />
       )}
     </div>
@@ -463,10 +480,16 @@ function SprintsTab({
   project,
   sprints,
   canWrite,
+  sprintMembers,
+  sprintCount,
+  defaultDurationWeeks,
 }: {
   project: Project;
   sprints: Sprint[];
   canWrite: boolean;
+  sprintMembers: SprintMember[];
+  sprintCount: number;
+  defaultDurationWeeks: number;
 }) {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -504,6 +527,13 @@ function SprintsTab({
       {canWrite && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold">Nova sprint</h2>
+          <SprintAiWizard
+            projectId={project.id}
+            projectKey={project.key}
+            members={sprintMembers}
+            sprintCount={sprintCount}
+            defaultDurationWeeks={defaultDurationWeeks}
+          />
           <AddSprintForm projectId={project.id} />
         </div>
       )}

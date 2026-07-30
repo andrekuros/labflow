@@ -24,7 +24,6 @@ model User {
   passwordHash String
   // global role: admin | researcher | project_manager | contributor | viewer
   role         String   @default("researcher")
-  title        String? // e.g. "PhD candidate", "Postdoc"
   // accountStatus: active | pending | rejected
   accountStatus String  @default("active")
   approvedAt   DateTime?
@@ -48,6 +47,18 @@ model User {
   feedbacks         Feedback[]        @relation("FeedbackSubmitter")
   assignedFeedbacks Feedback[]        @relation("FeedbackAssignee")
   feedbackComments  FeedbackComment[]
+  profiles          UserProfile[]
+}
+
+/** Perfis acumulativos do usuario (admin, pesquisador, mestrando, etc.). */
+model UserProfile {
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profile   String
+  createdAt DateTime @default(now())
+
+  @@id([userId, profile])
+  @@index([profile])
 }
 
 model ProjectMembership {
@@ -56,7 +67,7 @@ model ProjectMembership {
   userId    String
   project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   projectId String
-  // project role: lead | contributor | viewer
+  // project role: lead | contributor | viewer | advisor | coauthor
   role      String   @default("contributor")
   createdAt DateTime @default(now())
 
@@ -75,6 +86,14 @@ model Project {
   color       String   @default("#6366f1")
   // status: active | paused | archived
   status      String   @default("active")
+  // kind: lab | admin | thesis | dissertation | paper
+  kind        String   @default("lab")
+  // JSON: enabled modules (wbs, board, knowledge, methodology, ...)
+  featuresJson String  @default("{}")
+  // JSON: methodology, courses, pending, defense dates (thesis/dissertation)
+  academicJson String  @default("{}")
+  // JSON: paper pipeline (venue, doi, status, abstract, methodology fields)
+  paperJson   String   @default("{}")
   conops      String   @default("{}") // JSON: mission, scope, stakeholders, etc.
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -123,6 +142,10 @@ model AcademicProfile {
   coursesJson            String @default("[]")
   pendingJson            String @default("[]")
   notes                  String @default("")
+  // JSON: { fieldKey: { observation, reviewedAt, reviewer } }
+  aiReviewsJson          String @default("{}")
+  // JSON: { markdown, generatedAt, reviewer }
+  aiReportJson           String @default("{}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -164,6 +187,7 @@ model Task {
   // priority: low | medium | high | urgent
   priority      String   @default("medium")
   estimate      Float? // story points / hours
+  checklistJson String   @default("[]") // JSON: [{ id, title, done, order }]
   startDate     DateTime?
   dueDate       DateTime?
   order         Int      @default(0)
@@ -490,6 +514,12 @@ model Plugin {
   order       Int      @default(0)
   installedAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }
 
 model ApiKey {

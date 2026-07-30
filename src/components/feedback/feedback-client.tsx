@@ -51,10 +51,11 @@ type FeedbackRow = {
 type UserOption = { id: string; name: string };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  bug: "Bug",
+  bug: "Bug / erro",
   suggestion: "Sugestao",
   question: "Duvida",
-  equipment: "Equipamento/Material",
+  equipment: "Material / compra",
+  need: "Necessidade do lab",
 };
 const STATUS_LABELS: Record<string, string> = {
   open: "Aberto",
@@ -102,13 +103,13 @@ export function FeedbackPage({
   return (
     <div>
       <PageHeader
-        title="Feedback"
-        description="Reporte erros, sugira melhorias, solicite equipamentos ou tire duvidas."
+        title="Demandas"
+        description="Bugs, sugestoes, duvidas, pedidos de material e necessidades do laboratorio."
       />
 
       <div className="mb-4">
         <Button size="sm" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancelar" : "Novo feedback"}
+          {showForm ? "Cancelar" : "Nova demanda"}
         </Button>
       </div>
 
@@ -129,7 +130,7 @@ export function FeedbackPage({
       )}
 
       <div className="space-y-3">
-        {feedbacks.length === 0 && <p className="text-sm text-muted">Nenhum feedback registrado.</p>}
+        {feedbacks.length === 0 && <p className="text-sm text-muted">Nenhuma demanda registrada.</p>}
         {feedbacks.map((fb) => {
           const isExpanded = expanded === fb.id;
           const canComment = canManage || fb.submittedBy.id === currentUserId;
@@ -322,9 +323,7 @@ export function FeedbackPage({
                                       await rejectFeedbackDraft(d.id);
                                       setDraftsMap((prev) => ({
                                         ...prev,
-                                        [fb.id]: (prev[fb.id] ?? []).map((x) =>
-                                          x.id === d.id ? { ...x, status: "rejected" } : x,
-                                        ),
+                                        [fb.id]: (prev[fb.id] ?? []).filter((x) => x.id !== d.id),
                                       }));
                                     })
                                   }
@@ -333,10 +332,8 @@ export function FeedbackPage({
                                 </Button>
                               </div>
                             )}
-                            {d.status !== "pending" && (
-                              <Badge color={d.status === "accepted" ? "#22c55e" : "#64748b"}>
-                                {d.status === "accepted" ? "Aceito" : "Rejeitado"}
-                              </Badge>
+                            {d.status !== "pending" && d.status === "accepted" && (
+                              <Badge color="#22c55e">Aceito</Badge>
                             )}
                           </div>
                         ))}
@@ -485,10 +482,11 @@ function FeedbackForm({
               value={category}
               onChange={(e) => setCategory(e.target.value as FeedbackCategory)}
             >
-              <option value="bug">Bug / Erro</option>
-              <option value="suggestion">Sugestao de melhoria</option>
+              <option value="bug">Bug / erro</option>
+              <option value="suggestion">Sugestao</option>
               <option value="question">Duvida</option>
-              <option value="equipment">Equipamento / Material</option>
+              <option value="equipment">Material / compra</option>
+              <option value="need">Necessidade do lab</option>
             </select>
           </div>
           <div>
@@ -508,11 +506,12 @@ function FeedbackForm({
         </div>
 
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="fb-desc">Descricao</label>
+          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="fb-desc">Descricao da demanda</label>
           <textarea
             id="fb-desc"
             rows={4}
             className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
+            placeholder="Descreva a demanda..."
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -530,7 +529,7 @@ function FeedbackForm({
           />
         </div>
 
-        <Button type="submit" size="sm" disabled={disabled || !title.trim()}>Enviar feedback</Button>
+        <Button type="submit" size="sm" disabled={disabled || !title.trim()}>Enviar demanda</Button>
       </form>
     </Card>
   );

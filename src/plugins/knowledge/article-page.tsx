@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { canViewArticle, canEditArticle, canDeleteArticle } from "@/lib/knowledge-access";
+import { canViewArticle, canEditArticle, canDeleteArticle, getAdminOnlyFolders } from "@/lib/knowledge-access";
+import { articleIsAdminOnly } from "@/plugins/knowledge/folder-path";
 import { getNextcloudSettings, buildNextcloudFileUrl } from "@/plugins/knowledge/nextcloud-config";
 import { getArticleBacklinksAction } from "@/plugins/knowledge/link-actions";
 import { ArticleEditor } from "@/components/knowledge/article-editor";
@@ -28,6 +29,8 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
       ? buildNextcloudFileUrl(ncCfg, article.externalPath)
       : null;
 
+  const adminOnly = articleIsAdminOnly(article, getAdminOnlyFolders());
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/knowledge" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
@@ -38,6 +41,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
         canDelete={canDelete}
         externalSource={article.externalSource}
         nextcloudFileUrl={nextcloudFileUrl}
+        adminOnly={adminOnly}
         article={{
           id: article.id,
           title: article.title,

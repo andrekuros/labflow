@@ -4,16 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Settings,
-  FlaskConical,
-  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Avatar } from "@/components/ui";
-import { logoutAction } from "@/app/actions/auth";
-import { NotificationBell } from "@/components/notifications/notification-bell";
 import { getNavIcon } from "@/plugins/nav-icons";
 import { setSidebarCollapsed } from "@/app/actions/preferences";
 import type { NavItem } from "@/plugins/types";
@@ -22,9 +16,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 type SidebarProps = {
-  user: { name: string; role: string; avatarColor?: string };
   navItems: NavItem[];
-  unreadNotifications?: number;
   preferences: UserPreferences;
 };
 
@@ -38,7 +30,7 @@ function groupItems(items: NavItem[]) {
   return [...groups.entries()];
 }
 
-export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }: SidebarProps) {
+export function Sidebar({ navItems, preferences }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const collapsed = Boolean(preferences.sidebarCollapsed);
@@ -59,23 +51,11 @@ export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }
   return (
     <aside
       className={cn(
-        "flex h-screen shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200",
+        "flex h-full shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200",
         collapsed ? "w-16" : "w-60",
       )}
     >
-      <div className={cn("flex items-center gap-2 px-3 py-4", collapsed && "justify-center px-2")}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-fg">
-          <FlaskConical size={18} />
-        </div>
-        {!collapsed && (
-          <div className="min-w-0">
-            <p className="text-sm font-semibold leading-tight">LabFlow</p>
-            <p className="text-[11px] text-muted">Pesquisa</p>
-          </div>
-        )}
-      </div>
-
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-2">
+      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-3">
         {showDashboard && (
           <div>
             {!collapsed && (
@@ -130,7 +110,7 @@ export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }
         ))}
       </nav>
 
-      <div className="space-y-1 border-t border-border px-2 py-2">
+      <div className="border-t border-border px-2 py-2">
         <button
           type="button"
           disabled={pending}
@@ -144,44 +124,6 @@ export function Sidebar({ user, navItems, unreadNotifications = 0, preferences }
           {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
           {!collapsed && "Recolher menu"}
         </button>
-
-        <Link
-          href="/settings"
-          title="Configuracoes"
-          className={cn(
-            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
-            pathname.startsWith("/settings")
-              ? "bg-brand/15 font-medium text-fg"
-              : "text-muted hover:bg-surface2 hover:text-fg",
-            collapsed && "justify-center px-2",
-          )}
-        >
-          <Settings size={17} />
-          {!collapsed && "Configuracoes"}
-        </Link>
-      </div>
-
-      {!collapsed && <NotificationBell initialUnread={unreadNotifications} />}
-
-      <div className="border-t border-border p-3">
-        <div className={cn("flex items-center gap-2", collapsed && "justify-center")}>
-          <Avatar name={user.name} color={user.avatarColor} />
-          {!collapsed && (
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user.name}</p>
-              <p className="text-[11px] capitalize text-muted">{user.role}</p>
-            </div>
-          )}
-          <form action={logoutAction}>
-            <button
-              className="rounded-lg p-2 text-muted transition hover:bg-surface2 hover:text-fg"
-              title="Sair"
-              type="submit"
-            >
-              <LogOut size={16} />
-            </button>
-          </form>
-        </div>
       </div>
     </aside>
   );

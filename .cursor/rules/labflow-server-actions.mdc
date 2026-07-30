@@ -1,0 +1,36 @@
+---
+description: Padrões para server actions no LabFlow
+globs: "**/actions.ts"
+alwaysApply: false
+---
+
+# Server Actions
+
+## Autenticação
+
+```typescript
+const user = await requireUser();                          // qualquer usuário logado
+const user = await requirePermission("task:edit", projectId);  // com permissão
+const ok = await hasPermission(user, "knowledge:edit");  // check booleano
+```
+
+Conhecimento: usar `canViewArticle` / `assertCanEditArticle` de `@/lib/knowledge-access`.
+
+## Mutations
+
+1. Validar permissão
+2. Prisma create/update/delete
+3. `await emit({ type, actorId: user.id, projectId, payload })`
+4. `revalidatePath(...)` se a UI precisa atualizar
+
+## Erros
+
+Preferir `{ error: "mensagem" }` para actions chamadas por client components.
+`throw new Error(...)` aceitável em actions internas ou com try/catch na UI.
+
+## Eventos comuns
+
+`task.created|updated|moved`, `article.created|updated`, `deliverable.created|updated`,
+`requirement.created`, `project.created|updated`, `feedback.submitted`, `academic.updated`
+
+Novos tipos: adicionar em `DomainEventType` (`src/lib/events.ts`) e subscriber em `bootstrap.ts` se indexar RAG.

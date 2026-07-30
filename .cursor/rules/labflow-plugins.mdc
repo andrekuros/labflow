@@ -1,0 +1,58 @@
+---
+description: Padrões para desenvolvimento de plugins LabFlow
+globs: src/plugins/**
+alwaysApply: false
+---
+
+# Plugins LabFlow
+
+## Estrutura obrigatória
+
+```
+src/plugins/<id>/
+  manifest.ts    # PluginManifest (id, nav, settingsSchema, requires, aiTools)
+  actions.ts     # "use server" — lógica de negócio
+  page.tsx       # Server component
+  api.ts         # handlers REST (opcional)
+src/components/<id>/   # client components
+src/app/(app)/<rota>/page.tsx  # reexport do plugin page
+```
+
+## Registro
+
+1. Import manifest + api em `src/plugins/index.ts` → `BUILTIN_PLUGINS` + `API_REGISTRATIONS`
+2. Ícone Lucide em `src/plugins/nav-icons.tsx`
+
+## Manifest
+
+```typescript
+export const myManifest: PluginManifest = {
+  id: "my-plugin",           // usado na API /api/v1/my-plugin
+  name: "Meu Plugin",
+  version: "1.0.0",
+  requires: ["projects"],    // opcional
+  nav: { label, href, icon, order, group },
+  apiPrefix: "/api/v1/my-plugin",
+};
+```
+
+## Actions pattern
+
+```typescript
+"use server";
+import { requirePermission } from "@/lib/rbac";
+import { emit } from "@/lib/events";
+
+export async function createThing(input: ...) {
+  const user = await requirePermission("modulo:create", input.projectId);
+  // prisma mutation
+  await emit({ type: "thing.created", actorId: user.id, projectId, payload: { id } });
+  revalidatePath("/rota");
+}
+```
+
+## API handlers
+
+Chave: `"METHOD path"` ou `"METHOD path/:param"`. Exemplo: `"GET reports"`, `"POST items/:id"`.
+
+Referência: `src/plugins/reports/api.ts`, `src/plugins/knowledge/api.ts`.

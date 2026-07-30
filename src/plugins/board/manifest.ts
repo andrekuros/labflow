@@ -4,7 +4,7 @@ export const boardManifest: PluginManifest = {
   id: "board",
   name: "Kanban",
   version: "1.0.0",
-  description: "Quadro com drag-and-drop, filtros por projeto, pessoa, categoria e sprint.",
+  description: "Quadro com drag-and-drop, filtros multiplos, modelos salvos e colunas ocultaveis.",
   icon: "KanbanSquare",
   requires: ["projects"],
   nav: { label: "Kanban", href: "/board", icon: "KanbanSquare", order: 10, group: "Trabalho" },

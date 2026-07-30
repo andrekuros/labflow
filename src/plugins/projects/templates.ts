@@ -1,12 +1,13 @@
 import type { ConopsData, ArtifactType } from "@/lib/artifacts/schema";
 import { prisma } from "@/lib/db";
 
-export type ProjectTemplateKey = "blank" | "se" | "paper" | "software" | "hardware" | "conops";
+export type ProjectTemplateKey = "blank" | "se" | "software" | "hardware" | "conops" | "admin";
 
 export type ProjectTemplate = {
   key: ProjectTemplateKey;
   label: string;
   description: string;
+  kind: "lab" | "admin";
   defaultArtifactTypes: ArtifactType[];
   conops: (name: string, description?: string) => ConopsData;
 };
@@ -33,6 +34,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     key: "blank",
     label: "Projeto em branco",
     description: "Sem estrutura inicial. Preencha o CONOPS manualmente.",
+    kind: "lab",
     defaultArtifactTypes: ["requirement", "task", "deliverable"],
     conops: () => ({
       mission: "",
@@ -46,9 +48,22 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     }),
   },
   {
+    key: "admin",
+    label: "Administrativo",
+    description: "Projeto interno do lab (board, knowledge, forum). Sem WBS/SE.",
+    kind: "admin",
+    defaultArtifactTypes: ["task"],
+    conops: (name) =>
+      conops(name, undefined, {
+        mission: `Organizar atividades administrativas: ${name}.`,
+        scope: "Tarefas internas, documentacao e comunicacao do laboratorio.",
+      }),
+  },
+  {
     key: "conops",
     label: "CONOPS",
     description: "Foco em documentar o conceito de operacoes antes dos artefatos.",
+    kind: "lab",
     defaultArtifactTypes: ["requirement", "deliverable", "milestone"],
     conops: (name, description) =>
       conops(name, description, {
@@ -63,26 +78,10 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
       }),
   },
   {
-    key: "paper",
-    label: "Artigo cientifico",
-    description: "WBS para pesquisa, redacao, submissao e revisao por pares.",
-    defaultArtifactTypes: ["task", "deliverable", "milestone", "requirement"],
-    conops: (name, description) =>
-      conops(name, description, {
-        mission: `Produzir e publicar o artigo cientifico: ${name}.`,
-        scope: description ?? "Revisao de literatura, metodologia, experimentos, analise, redacao e submissao.",
-        stakeholders: "Autores, orientador, coautores, revisores, editor da revista/conferencia.",
-        operatingEnvironment: "Laboratorio, repositorio de dados, ferramentas de escrita e submissao (Overleaf, ScholarOne, etc.).",
-        conceptOfOperations: `1) Definir pergunta de pesquisa e contribuicao\n2) Revisar literatura e gap\n3) Executar metodologia e coletar resultados\n4) Redigir rascunho e iterar com coautores\n5) Submeter, responder revisores e publicar`,
-        constraints: "Prazo da conferencia/revista, limite de paginas, etica em pesquisa (CEP quando aplicavel).",
-        successCriteria: "Artigo aceito ou publicado; dados e codigo (se houver) disponibilizados conforme politica.",
-        assumptions: "Acesso a dados/equipamentos; coautores alinhados na ordem de autoria.",
-      }),
-  },
-  {
     key: "software",
     label: "Software",
     description: "Produto de software com requisitos, sprints e entregaveis tecnicos.",
+    kind: "lab",
     defaultArtifactTypes: ["requirement", "task", "deliverable", "work_package", "verification_case"],
     conops: (name, description) =>
       conops(name, description, {
@@ -100,6 +99,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     key: "hardware",
     label: "Hardware",
     description: "Engenharia de hardware com SoI, interfaces e gates de design.",
+    kind: "lab",
     defaultArtifactTypes: ["requirement", "system_element", "deliverable", "milestone", "verification_case"],
     conops: (name, description) =>
       conops(name, description, {
@@ -117,6 +117,7 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
     key: "se",
     label: "Engenharia de Sistemas",
     description: "WBS classica, gates SRR–FRR, System of Interest e requisitos exemplo.",
+    kind: "lab",
     defaultArtifactTypes: ["requirement", "work_package", "milestone", "system_element", "verification_case"],
     conops: (name, description) =>
       conops(name, description, {
@@ -154,30 +155,7 @@ export async function applyProjectTemplate(
     return;
   }
 
-  if (templateKey === "paper") {
-    const wbs = [
-      { code: "1", name: "Revisao de literatura" },
-      { code: "2", name: "Metodologia e experimentos" },
-      { code: "3", name: "Analise de resultados" },
-      { code: "4", name: "Redacao" },
-      { code: "5", name: "Submissao e revisao" },
-    ];
-    for (const [i, w] of wbs.entries()) {
-      await prisma.workPackage.create({ data: { projectId, code: w.code, name: w.name, order: i } });
-    }
-    await prisma.milestone.createMany({
-      data: [
-        { projectId, name: "Rascunho interno", kind: "milestone", status: "upcoming" },
-        { projectId, name: "Submissao", kind: "release", status: "upcoming" },
-        { projectId, name: "Aceite/publicacao", kind: "release", status: "upcoming" },
-      ],
-    });
-    await prisma.deliverable.createMany({
-      data: [
-        { projectId, name: "Rascunho do artigo", status: "pending" },
-        { projectId, name: "Material suplementar", status: "pending" },
-      ],
-    });
+  if (templateKey === "admin") {
     return;
   }
 

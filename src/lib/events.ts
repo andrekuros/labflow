@@ -27,7 +27,11 @@ export type DomainEventType =
   | "user.created"
   | "user.updated"
   | "academic.updated"
-  | "feedback.submitted";
+  | "publication.created"
+  | "publication.updated"
+  | "feedback.submitted"
+  | "sprint.created"
+  | "report.weekly_sent";
 
 export type DomainEvent = {
   type: DomainEventType;

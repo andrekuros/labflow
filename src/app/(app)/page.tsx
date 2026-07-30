@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Card, Badge, Avatar, PageHeader } from "@/components/ui";
 import { formatDate, daysUntil } from "@/lib/utils";
+import { labelForEvent } from "@/lib/activity-log/constants";
 import { CalendarClock, CheckCircle2, ListTodo, PackageCheck } from "lucide-react";
 import { PluginSlot } from "@/components/plugin-slot";
 
@@ -132,22 +133,4 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
       </div>
     </Card>
   );
-}
-
-function labelForEvent(type: string) {
-  const map: Record<string, string> = {
-    "task.created": "Tarefa criada",
-    "task.updated": "Tarefa atualizada",
-    "task.moved": "Tarefa movida no Kanban",
-    "deliverable.created": "Entregavel criado",
-    "deliverable.updated": "Entregavel atualizado",
-    "requirement.created": "Requisito criado",
-    "article.created": "Artigo de conhecimento criado",
-    "article.updated": "Artigo atualizado",
-    "article.deleted": "Artigo excluido",
-    "thread.created": "Novo topico no forum",
-    "post.created": "Nova mensagem no forum",
-    "project.created": "Projeto criado",
-  };
-  return map[type] ?? type;
 }

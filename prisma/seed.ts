@@ -45,19 +45,19 @@ async function main() {
   const pw = (p: string) => bcrypt.hashSync(p, 10);
 
   const ana = await prisma.user.create({
-    data: { email: "admin@lab.edu", name: "Ana Admin", role: "admin", title: "Coordenadora", passwordHash: pw("admin123"), avatarColor: "#6366f1" },
+    data: { email: "admin@lab.edu", name: "Ana Admin", role: "admin", passwordHash: pw("admin123"), avatarColor: "#6366f1" },
   });
   const carlos = await prisma.user.create({
-    data: { email: "carlos@lab.edu", name: "Carlos Pereira", role: "researcher", title: "Orientador / PI", passwordHash: pw("lab12345"), avatarColor: "#0ea5e9" },
+    data: { email: "carlos@lab.edu", name: "Carlos Pereira", role: "researcher", passwordHash: pw("lab12345"), avatarColor: "#0ea5e9" },
   });
   const bruna = await prisma.user.create({
-    data: { email: "bruna@lab.edu", name: "Bruna Lima", role: "phd", title: "Doutoranda", passwordHash: pw("lab12345"), avatarColor: "#ec4899" },
+    data: { email: "bruna@lab.edu", name: "Bruna Lima", role: "phd", passwordHash: pw("lab12345"), avatarColor: "#ec4899" },
   });
   const diego = await prisma.user.create({
-    data: { email: "diego@lab.edu", name: "Diego Souza", role: "msc", title: "Mestrando", passwordHash: pw("lab12345"), avatarColor: "#f59e0b" },
+    data: { email: "diego@lab.edu", name: "Diego Souza", role: "msc", passwordHash: pw("lab12345"), avatarColor: "#f59e0b" },
   });
   const elena = await prisma.user.create({
-    data: { email: "elena@lab.edu", name: "Elena Rocha", role: "student", title: "IC", passwordHash: pw("lab12345"), avatarColor: "#10b981" },
+    data: { email: "elena@lab.edu", name: "Elena Rocha", role: "student", passwordHash: pw("lab12345"), avatarColor: "#10b981" },
   });
 
   const neuro = await prisma.project.create({
@@ -66,6 +66,12 @@ async function main() {
       name: "Interfaces Neurais Adaptativas",
       description: "Pesquisa em BCIs adaptativas para reabilitacao motora.",
       color: "#8b5cf6",
+      kind: "lab",
+      featuresJson: JSON.stringify({
+        wbs: true, requirements: true, deliverables: true, sprints: true, roadmap: true,
+        systemModel: true, verification: true, conops: true, board: true, knowledge: true,
+        forum: true, methodology: false, courses: false, paperPipeline: false,
+      }),
       memberships: {
         create: [
           { userId: carlos.id, role: "lead" },
@@ -83,6 +89,12 @@ async function main() {
       name: "Robotica Colaborativa",
       description: "Cobots para manipulacao assistida em ambientes nao estruturados.",
       color: "#0ea5e9",
+      kind: "lab",
+      featuresJson: JSON.stringify({
+        wbs: true, requirements: true, deliverables: true, sprints: true, roadmap: true,
+        systemModel: true, verification: true, conops: true, board: true, knowledge: true,
+        forum: true, methodology: false, courses: false, paperPipeline: false,
+      }),
       memberships: {
         create: [
           { userId: carlos.id, role: "lead" },

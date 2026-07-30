@@ -10,9 +10,9 @@ export const handlers: PluginApiHandlers = {
         name: true,
         email: true,
         role: true,
-        title: true,
         avatarColor: true,
         createdAt: true,
+        profiles: { select: { profile: true } },
       },
       orderBy: { name: "asc" },
     });

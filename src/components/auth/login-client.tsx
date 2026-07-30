@@ -93,10 +93,6 @@ export function LoginClient({
               <Input id="reg-email" name="email" type="email" placeholder="voce@lab.edu" autoComplete="email" required />
             </div>
             <div>
-              <Label htmlFor="reg-title">Titulo / vinculo (opcional)</Label>
-              <Input id="reg-title" name="title" placeholder="ex: Mestrando" />
-            </div>
-            <div>
               <Label htmlFor="reg-password">Senha</Label>
               <Input id="reg-password" name="password" type="password" autoComplete="new-password" required />
             </div>
@@ -117,11 +113,6 @@ export function LoginClient({
           </form>
         )}
 
-        {mode === "login" && (
-          <p className="mt-6 text-center text-xs text-muted">
-            Demo: <span className="text-fg">admin@lab.edu</span> / <span className="text-fg">admin123</span>
-          </p>
-        )}
       </Card>
     </div>
   );

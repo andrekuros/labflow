@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { chat, aiEnabled, type ChatMessage } from "@/lib/ai/provider";
 import { search } from "@/lib/ai/rag";
 import { ingest } from "@/lib/ai/rag";
+import { filterRagHitsForUser } from "@/lib/knowledge-access";
 import { getPluginSettings } from "@/plugins/registry";
 
 type FeedbackPayload = {
@@ -30,7 +31,10 @@ export async function processFeedback(payload: FeedbackPayload) {
   });
   if (!project) return;
 
-  const ragHits = await search(`${payload.title} ${payload.description}`, { limit: 5 });
+  const ragHits = await filterRagHitsForUser(
+    await search(`${payload.title} ${payload.description}`, { limit: 5 }),
+    null,
+  );
   const context = ragHits.map((h) => `- [${h.sourceType}] ${h.chunk}`).join("\n");
 
   const prompt = `Voce e um analista de software. Um usuario reportou o seguinte feedback na plataforma LabFlow:

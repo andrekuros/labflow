@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { getUserProfileKeys, primaryProfile } from "@/lib/user-profiles";
 
 const COOKIE_NAME = "labflow_session";
 const secret = new TextEncoder().encode(
@@ -14,7 +15,25 @@ export type SessionUser = {
   email: string;
   name: string;
   role: string;
+  profiles: string[];
 };
+
+export async function buildSessionUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+}): Promise<SessionUser> {
+  const profiles = await getUserProfileKeys(user.id);
+  const list = profiles.length ? profiles : [user.role];
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    profiles: list,
+    role: primaryProfile(list),
+  };
+}
 
 export async function hashPassword(plain: string) {
   return bcrypt.hash(plain, 10);
@@ -57,6 +76,9 @@ export async function getSession(): Promise<SessionUser | null> {
       email: payload.email as string,
       name: payload.name as string,
       role: payload.role as string,
+      profiles: Array.isArray(payload.profiles)
+        ? (payload.profiles as string[])
+        : [payload.role as string],
     };
   } catch {
     return null;

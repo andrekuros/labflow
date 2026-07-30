@@ -29,7 +29,8 @@ export type ArtifactType =
   | "work_package"
   | "milestone"
   | "system_element"
-  | "verification_case";
+  | "verification_case"
+  | "sprint_plan";
 
 export const ARTIFACT_TYPES: ArtifactType[] = [
   "requirement",
@@ -39,6 +40,7 @@ export const ARTIFACT_TYPES: ArtifactType[] = [
   "milestone",
   "system_element",
   "verification_case",
+  "sprint_plan",
 ];
 
 export type ArtifactsBundle = {
@@ -67,6 +69,13 @@ export function parseConops(raw: string | null | undefined): ConopsData {
 }
 
 export function draftTitle(type: ArtifactType, data: Record<string, unknown>): string {
+  if (type === "sprint_plan") {
+    const sprint = data.sprint as { name?: string } | undefined;
+    const tasks = data.suggestedTasks as unknown[] | undefined;
+    const name = sprint?.name ?? "Sprint";
+    const count = Array.isArray(tasks) ? tasks.length : 0;
+    return `${name} — ${count} tarefa(s) sugerida(s)`.slice(0, 120);
+  }
   const t = String(data.title ?? data.name ?? data.code ?? type);
   return t.slice(0, 120);
 }

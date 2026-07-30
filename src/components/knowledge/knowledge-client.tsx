@@ -16,6 +16,7 @@ import { articleMatchesFolder } from "@/plugins/knowledge/folder-tree";
 import type { FolderTreeNode } from "@/plugins/knowledge/folder-tree";
 import type { KnowledgeSearchResult } from "@/plugins/knowledge/types";
 import { KnowledgeFolderTree } from "@/components/knowledge/knowledge-folder-tree";
+import { AdminOnlyBadge } from "@/components/knowledge/admin-only-badge";
 import { KnowledgeHealthPanel } from "@/components/knowledge/knowledge-health-panel";
 import type { HealthReport } from "@/plugins/knowledge/health";
 
@@ -30,6 +31,7 @@ type ArticleItem = {
   externalSource?: string | null;
   externalFolder?: string | null;
   externalStatus?: string | null;
+  adminOnly?: boolean;
 };
 
 type NextcloudInfo = {
@@ -56,6 +58,7 @@ export function KnowledgeClient({
   healthReport,
   pagination,
   initialFolder,
+  adminOnlyFolders = [],
 }: {
   articles: ArticleItem[];
   projects: { id: string; key: string; name: string }[];
@@ -67,6 +70,7 @@ export function KnowledgeClient({
   healthReport?: HealthReport | null;
   pagination: { page: number; totalPages: number; totalCount: number; pageSize: number };
   initialFolder: string;
+  adminOnlyFolders?: string[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -219,8 +223,11 @@ export function KnowledgeClient({
           <div className="space-y-2">
             {results.articles.map((r) => (
               <Link key={r.id} href={`/knowledge/${r.id}`} className="block rounded-lg border border-border p-3 hover:bg-surface2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">{r.title}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium">{r.title}</p>
+                    {r.adminOnly && <AdminOnlyBadge />}
+                  </div>
                   {semanticSearchEnabled && (
                     <span className="text-[11px] text-muted">{Math.round(r.score * 100)}% relevante</span>
                   )}
@@ -239,6 +246,7 @@ export function KnowledgeClient({
             localCount={folderTree.localCount}
             selected={selectedFolder}
             onSelect={navigateFolder}
+            adminOnlyFolders={adminOnlyFolders}
           />
         )}
 
@@ -266,6 +274,7 @@ export function KnowledgeClient({
                     {a.externalStatus && (
                       <Badge className="bg-surface2 text-muted">{STATUS_LABELS[a.externalStatus] ?? a.externalStatus}</Badge>
                     )}
+                    {a.adminOnly && <AdminOnlyBadge />}
                   </div>
                   <h3 className="font-medium">{a.title}</h3>
                   {a.externalFolder && (

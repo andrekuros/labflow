@@ -13,6 +13,10 @@ prisma/dev.db
 prisma/dev.db-journal
 *.db
 *.db-journal
+backups/
+
+# Uploaded branding assets
+public/uploads/
 
 # Logs
 *.log

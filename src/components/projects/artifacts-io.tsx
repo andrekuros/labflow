@@ -88,6 +88,7 @@ export function ArtifactsIo({ projectId, writable }: { projectId: string; writab
                 try {
                   const n = await importProjectJson(projectId, json);
                   setJson("");
+                  router.push(`/projects/${projectId}?tab=review`);
                   router.refresh();
                   if (n === 0) setError("Nenhum artefato no JSON");
                 } catch (e) {

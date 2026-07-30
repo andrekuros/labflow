@@ -1,63 +1,109 @@
+import { Suspense } from "react";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds, writableMap } from "@/lib/projects";
+import { workspaceProjectIds, getUserWorkspace } from "@/lib/workspace";
+import { writableMap } from "@/lib/projects";
 import { KanbanBoard } from "@/components/board/kanban-board";
 import { EmptyState } from "@/components/ui";
+import { getBoardColumnsMap } from "@/plugins/board/columns";
+import { parseChecklist } from "@/lib/task-checklist";
+import { parsePreferences } from "@/lib/user-preferences";
 
 export default async function BoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ assignee?: string; project?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const session = await requireUser();
-  const { assignee, project } = await searchParams;
-  const projectIds = await viewableProjectIds(session);
+  await searchParams;
+  const projectIds = await workspaceProjectIds(session);
+  const ws = await getUserWorkspace(session.id);
 
   if (projectIds.length === 0) {
-    return <EmptyState title="Nenhum projeto" description="Voce ainda nao participa de nenhum projeto. Crie um em Projetos." />;
+    return (
+      <EmptyState
+        title="Nenhum projeto"
+        description="Nenhum projeto no contexto atual. Ajuste os filtros de tipo no menu."
+      />
+    );
   }
 
-  const [projects, tasks, members, labels, sprints, canWrite] = await Promise.all([
-    prisma.project.findMany({ where: { id: { in: projectIds } }, orderBy: { name: "asc" } }),
-    prisma.task.findMany({
-      where: { projectId: { in: projectIds } },
-      include: { assignees: true, labels: true, project: true },
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-    }),
-    prisma.user.findMany({
-      where: { memberships: { some: { projectId: { in: projectIds } } } },
-      orderBy: { name: "asc" },
-    }),
-    prisma.label.findMany({ where: { projectId: { in: projectIds } } }),
-    prisma.sprint.findMany({ where: { projectId: { in: projectIds } }, orderBy: { createdAt: "desc" } }),
-    writableMap(session, projectIds),
-  ]);
+  const lockedProject =
+    ws.mode === "project" && ws.projectId && projectIds.includes(ws.projectId)
+      ? ws.projectId
+      : projectIds.length === 1
+        ? projectIds[0]
+        : "";
+  const initialProject = lockedProject || "";
+  const projectLocked = Boolean(
+    (ws.mode === "project" && ws.projectId && projectIds.includes(ws.projectId)) ||
+      projectIds.length === 1,
+  );
+
+  const [projects, tasks, members, labels, sprints, workPackages, canWrite, projectColumns, userRow] =
+    await Promise.all([
+      prisma.project.findMany({ where: { id: { in: projectIds } }, orderBy: { name: "asc" } }),
+      prisma.task.findMany({
+        where: { projectId: { in: projectIds } },
+        include: { assignees: true, labels: true, project: true },
+        orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+      }),
+      prisma.user.findMany({
+        where: { memberships: { some: { projectId: { in: projectIds } } } },
+        orderBy: { name: "asc" },
+      }),
+      prisma.label.findMany({ where: { projectId: { in: projectIds } } }),
+      prisma.sprint.findMany({ where: { projectId: { in: projectIds } }, orderBy: { createdAt: "desc" } }),
+      prisma.workPackage.findMany({
+        where: { projectId: { in: projectIds } },
+        orderBy: [{ order: "asc" }],
+        select: { id: true, code: true, name: true, projectId: true, parentId: true },
+      }),
+      writableMap(session, projectIds),
+      getBoardColumnsMap(projectIds),
+      prisma.user.findUnique({ where: { id: session.id }, select: { preferences: true } }),
+    ]);
+
+  const savedViews = parsePreferences(userRow?.preferences).boardViews ?? [];
 
   return (
-    <KanbanBoard
-      currentUserId={session.id}
-      initialAssignee={assignee ?? ""}
-      initialProject={project ?? ""}
-      projects={projects.map((p) => ({ id: p.id, key: p.key, name: p.name, color: p.color }))}
-      members={members.map((m) => ({ id: m.id, name: m.name, avatarColor: m.avatarColor }))}
-      labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, projectId: l.projectId }))}
-      sprints={sprints.map((s) => ({ id: s.id, name: s.name, projectId: s.projectId, status: s.status }))}
-      canWrite={canWrite}
-      tasks={tasks.map((t) => ({
-        id: t.id,
-        title: t.title,
-        description: t.description,
-        status: t.status,
-        priority: t.priority,
-        dueDate: t.dueDate ? t.dueDate.toISOString() : null,
-        projectId: t.projectId,
-        projectKey: t.project.key,
-        projectColor: t.project.color,
-        sprintId: t.sprintId,
-        workPackageId: t.workPackageId,
-        assignees: t.assignees.map((a) => ({ id: a.id, name: a.name, avatarColor: a.avatarColor })),
-        labels: t.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
-      }))}
-    />
+    <Suspense fallback={<div className="text-sm text-muted">Carregando quadro...</div>}>
+      <KanbanBoard
+        currentUserId={session.id}
+        initialProject={initialProject}
+        projectLocked={projectLocked}
+        savedViews={savedViews}
+        projects={projects.map((p) => ({ id: p.id, key: p.key, name: p.name, color: p.color }))}
+        members={members.map((m) => ({ id: m.id, name: m.name, avatarColor: m.avatarColor }))}
+        labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, projectId: l.projectId }))}
+        sprints={sprints.map((s) => ({ id: s.id, name: s.name, projectId: s.projectId, status: s.status }))}
+        workPackages={workPackages.map((w) => ({
+          id: w.id,
+          code: w.code,
+          name: w.name,
+          projectId: w.projectId,
+          parentId: w.parentId,
+        }))}
+        canWrite={canWrite}
+        projectColumns={projectColumns}
+        tasks={tasks.map((t) => ({
+          id: t.id,
+          title: t.title,
+          description: t.description,
+          status: t.status,
+          order: t.order,
+          priority: t.priority,
+          dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+          projectId: t.projectId,
+          projectKey: t.project.key,
+          projectColor: t.project.color,
+          sprintId: t.sprintId,
+          workPackageId: t.workPackageId,
+          checklist: parseChecklist(t.checklistJson),
+          assignees: t.assignees.map((a) => ({ id: a.id, name: a.name, avatarColor: a.avatarColor })),
+          labels: t.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+        }))}
+      />
+    </Suspense>
   );
 }

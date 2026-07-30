@@ -17,6 +17,7 @@ const EMPTY_COUNTS = (): ArtifactCounts => ({
   milestone: { accepted: 0, pending: 0 },
   system_element: { accepted: 0, pending: 0 },
   verification_case: { accepted: 0, pending: 0 },
+  sprint_plan: { accepted: 0, pending: 0 },
 });
 
 export async function getExistingArtifactSummary(projectId: string): Promise<ExistingArtifactSummary> {

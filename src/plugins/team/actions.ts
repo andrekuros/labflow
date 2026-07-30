@@ -8,48 +8,46 @@ import { indexUser } from "@/lib/ai/knowledge-indexer";
 import { notifyAdmins } from "@/lib/notifications";
 import { ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
 import { canManageUserProfiles } from "@/lib/user-access";
+import {
+  legacyRoleToProfiles,
+  normalizeProfiles,
+  primaryProfile,
+  setUserProfiles,
+} from "@/lib/user-profiles";
+import { parseUsersCsv } from "@/lib/users-csv";
 
 const COLORS = ["#6366f1", "#0ea5e9", "#ec4899", "#f59e0b", "#10b981", "#a855f7", "#ef4444"];
-const VALID_ROLES = new Set(["admin", "researcher", "project_manager", "contributor", "viewer"]);
-
-function parseCsvLine(line: string): string[] {
-  const out: string[] = [];
-  let cur = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-      continue;
-    }
-    if (ch === "," && !inQuotes) {
-      out.push(cur.trim());
-      cur = "";
-      continue;
-    }
-    cur += ch;
-  }
-  out.push(cur.trim());
-  return out;
-}
 
 async function requireAdminSession() {
   const session = await getSession();
-  if (!session || !canManageUserProfiles(session.role)) {
+  if (!session || !canManageUserProfiles(session)) {
     throw new Error("Apenas administradores podem gerenciar usuarios.");
   }
   return session;
 }
 
-export async function createUser(input: { name: string; email: string; password: string; role: string; title?: string }) {
+export async function createUser(input: {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  profiles?: string[];
+}) {
   const session = await requireAdminSession();
-  const user = await createUserRecord(input, "active");
+  const profiles = input.profiles?.length ? normalizeProfiles(input.profiles) : legacyRoleToProfiles(input.role);
+  const user = await createUserRecord(
+    { ...input, role: primaryProfile(profiles) },
+    "active",
+    profiles,
+  );
   await emit({ type: "user.created", actorId: session.id, targetId: user.id, payload: { id: user.id, name: user.name } });
   revalidatePath("/team");
+  revalidatePath("/settings");
+  revalidatePath("/academic");
   return user;
 }
 
-export async function registerPendingUser(input: { name: string; email: string; password: string; title?: string }) {
+export async function registerPendingUser(input: { name: string; email: string; password: string }) {
   await ensurePluginRegistry();
   const settings = getPluginSettings("team");
   if (!Boolean(settings.allowSelfRegistration ?? true)) {
@@ -57,24 +55,27 @@ export async function registerPendingUser(input: { name: string; email: string; 
   }
 
   const defaultRole = String(settings.defaultRole ?? "contributor");
+  const profiles = legacyRoleToProfiles(defaultRole);
   const user = await createUserRecord(
-    { ...input, role: defaultRole },
+    { ...input, role: primaryProfile(profiles) },
     "pending",
+    profiles,
   );
 
   await notifyAdmins({
     kind: "user_pending",
     title: "Novo cadastro aguardando aprovacao",
     message: `${user.name} (${user.email}) solicitou acesso ao LabFlow.`,
-    href: "/team",
+    href: "/settings",
   });
 
   return user;
 }
 
 async function createUserRecord(
-  input: { name: string; email: string; password: string; role: string; title?: string },
+  input: { name: string; email: string; password: string; role: string },
   accountStatus: "active" | "pending",
+  profiles: string[],
 ) {
   const email = input.email.trim().toLowerCase();
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -85,46 +86,64 @@ async function createUserRecord(
     throw new Error("Ja existe um usuario com este email.");
   }
 
-  const role = VALID_ROLES.has(input.role) ? input.role : "contributor";
   const count = await prisma.user.count();
   const user = await prisma.user.create({
     data: {
       name: input.name.trim(),
       email,
       passwordHash: await hashPassword(input.password),
-      role: accountStatus === "pending" ? role : role,
-      title: input.title?.trim() || null,
+      role: input.role,
       accountStatus,
       avatarColor: COLORS[count % COLORS.length],
     },
   });
+
+  await setUserProfiles(user.id, profiles);
+
   if (accountStatus === "active") {
     await indexUser(user.id).catch(() => {});
   }
   return user;
 }
 
-export async function approveUser(userId: string, input?: { role?: string; title?: string }) {
+export async function approveUser(
+  userId: string,
+  input?: { role?: string; profiles?: string[]; name?: string; email?: string; password?: string },
+) {
   const session = await requireAdminSession();
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || user.accountStatus !== "pending") throw new Error("Usuario invalido ou ja processado.");
 
-  const role = input?.role && VALID_ROLES.has(input.role) ? input.role : user.role;
+  if (input?.name || input?.email || input?.password) {
+    await updateUserProfile(userId, {
+      name: input.name,
+      email: input.email,
+      password: input.password,
+    });
+  }
+
+  const profiles = input?.profiles?.length
+    ? normalizeProfiles(input.profiles)
+    : legacyRoleToProfiles(input?.role ?? user.role);
+  const role = primaryProfile(profiles);
 
   await prisma.user.update({
     where: { id: userId },
     data: {
       accountStatus: "active",
       role,
-      title: input?.title !== undefined ? input.title || null : user.title,
       approvedAt: new Date(),
       approvedBy: session.id,
     },
   });
 
+  await setUserProfiles(userId, profiles);
+
   await indexUser(userId).catch(() => {});
   await emit({ type: "user.updated", actorId: session.id, targetId: userId, payload: { id: userId } });
   revalidatePath("/team");
+  revalidatePath("/settings");
+  revalidatePath("/academic");
 }
 
 export async function rejectUser(userId: string) {
@@ -138,24 +157,56 @@ export async function rejectUser(userId: string) {
   });
 
   revalidatePath("/team");
+  revalidatePath("/settings");
 }
 
 export async function updateUserProfile(
   userId: string,
-  input: { role?: string; title?: string | null },
+  input: { role?: string; profiles?: string[]; name?: string; email?: string; password?: string },
 ) {
   const session = await requireAdminSession();
-  const data: { role?: string; title?: string | null } = {};
-  if (input.role !== undefined) {
-    if (!VALID_ROLES.has(input.role)) throw new Error("Papel invalido.");
-    data.role = input.role;
-  }
-  if (input.title !== undefined) data.title = input.title || null;
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new Error("Usuario nao encontrado.");
 
-  await prisma.user.update({ where: { id: userId }, data });
+  const data: { name?: string; email?: string; passwordHash?: string } = {};
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error("Nome nao pode ficar vazio.");
+    if (name !== user.name) data.name = name;
+  }
+
+  if (input.email !== undefined) {
+    const email = input.email.trim().toLowerCase();
+    if (!email.includes("@")) throw new Error("Email invalido.");
+    if (email !== user.email) {
+      const taken = await prisma.user.findUnique({ where: { email } });
+      if (taken && taken.id !== userId) throw new Error("Este email ja esta em uso.");
+      data.email = email;
+    }
+  }
+
+  if (input.password) {
+    if (input.password.length < 6) throw new Error("Senha deve ter pelo menos 6 caracteres.");
+    data.passwordHash = await hashPassword(input.password);
+  }
+
+  if (input.profiles !== undefined) {
+    const normalized = await setUserProfiles(userId, input.profiles);
+    await prisma.user.update({ where: { id: userId }, data: { role: primaryProfile(normalized) } });
+  } else if (input.role !== undefined) {
+    await setUserProfiles(userId, legacyRoleToProfiles(input.role));
+  }
+
+  if (Object.keys(data).length > 0) {
+    await prisma.user.update({ where: { id: userId }, data });
+  }
+
   await emit({ type: "user.updated", actorId: session.id, targetId: userId, payload: { id: userId } });
   await indexUser(userId).catch(() => {});
   revalidatePath("/team");
+  revalidatePath("/settings");
+  revalidatePath("/academic");
   revalidatePath(`/team/${userId}`);
 }
 
@@ -167,61 +218,82 @@ export type CsvImportResult = {
 
 export async function importUsersFromCsv(csv: string): Promise<CsvImportResult> {
   const session = await requireAdminSession();
+  const { rows, errors: parseErrors } = parseUsersCsv(csv);
+  const result: CsvImportResult = { created: 0, skipped: 0, errors: [...parseErrors] };
 
-  const lines = csv
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith("#"));
+  if (rows.length === 0 && parseErrors.length === 0) {
+    throw new Error("CSV vazio ou sem linhas validas");
+  }
 
-  if (lines.length === 0) throw new Error("CSV vazio");
-
-  const header = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
-  const hasHeader = header.includes("email") && header.includes("name");
-  const dataLines = hasHeader ? lines.slice(1) : lines;
-
-  const col = (name: string) => (hasHeader ? header.indexOf(name) : -1);
-  const idx = {
-    name: hasHeader ? col("name") : 0,
-    email: hasHeader ? col("email") : 1,
-    password: hasHeader ? col("password") : 2,
-    role: hasHeader ? col("role") : 3,
-    title: hasHeader ? col("title") : 4,
-  };
-
-  const result: CsvImportResult = { created: 0, skipped: 0, errors: [] };
-
-  for (const [i, line] of dataLines.entries()) {
-    const cols = parseCsvLine(line);
-    const name = cols[idx.name]?.trim();
-    const email = cols[idx.email]?.trim().toLowerCase();
-    const password = cols[idx.password]?.trim();
-    const role = cols[idx.role]?.trim() || "researcher";
-    const title = idx.title >= 0 ? cols[idx.title]?.trim() : "";
-
-    if (!name || !email || !password) {
-      result.errors.push(`Linha ${i + (hasHeader ? 2 : 1)}: name, email e password obrigatorios`);
-      continue;
-    }
-
-    const exists = await prisma.user.findUnique({ where: { email } });
+  for (const row of rows) {
+    const exists = await prisma.user.findUnique({ where: { email: row.email } });
     if (exists) {
       result.skipped += 1;
       continue;
     }
 
     try {
-      const user = await createUserRecord({ name, email, password, role, title: title || undefined }, "active");
-      await emit({ type: "user.created", actorId: session.id, targetId: user.id, payload: { id: user.id, name: user.name } });
+      const profiles = normalizeProfiles(row.profiles);
+      const user = await createUserRecord(
+        {
+          name: row.name,
+          email: row.email,
+          password: row.password,
+          role: primaryProfile(profiles),
+        },
+        "active",
+        profiles,
+      );
+      await emit({
+        type: "user.created",
+        actorId: session.id,
+        targetId: user.id,
+        payload: { id: user.id, name: user.name },
+      });
       result.created += 1;
     } catch (e) {
-      result.errors.push(`Linha ${i + (hasHeader ? 2 : 1)}: ${e instanceof Error ? e.message : "erro"}`);
+      result.errors.push(`Linha ${row.line}: ${e instanceof Error ? e.message : "erro"}`);
     }
   }
 
   revalidatePath("/team");
+  revalidatePath("/settings");
   return result;
 }
 
 export async function setUserRole(userId: string, role: string) {
   return updateUserProfile(userId, { role });
+}
+
+export async function deleteUser(userId: string) {
+  const session = await requireAdminSession();
+  if (session.id === userId) {
+    throw new Error("Voce nao pode excluir sua propria conta.");
+  }
+
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { profiles: { select: { profile: true } } },
+  });
+  if (!target) throw new Error("Usuario nao encontrado.");
+
+  const isTargetAdmin =
+    target.profiles.some((p) => p.profile === "admin") || target.role === "admin";
+
+  if (isTargetAdmin && target.accountStatus === "active") {
+    const activeAdmins = await prisma.user.count({
+      where: {
+        accountStatus: "active",
+        OR: [{ role: "admin" }, { profiles: { some: { profile: "admin" } } }],
+      },
+    });
+    if (activeAdmins <= 1) {
+      throw new Error("Nao e possivel excluir o ultimo administrador ativo.");
+    }
+  }
+
+  await prisma.user.delete({ where: { id: userId } });
+  await emit({ type: "user.updated", actorId: session.id, targetId: userId, payload: { id: userId, deleted: true } });
+  revalidatePath("/team");
+  revalidatePath("/settings");
 }

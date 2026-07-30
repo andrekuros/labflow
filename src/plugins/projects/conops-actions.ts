@@ -8,7 +8,7 @@ import { aiEnabled } from "@/lib/ai/provider";
 import { generateArtifactsFromConops, type GenerationMode } from "@/lib/ai/conops-generator";
 import { exportProjectArtifacts } from "@/lib/artifacts/export";
 import { importArtifactsAsDrafts, parseArtifactsJson } from "@/lib/artifacts/import";
-import { acceptAiDraft, createDraftsFromBundle } from "@/lib/artifacts/accept-draft";
+import { acceptAiDraft, createDraftsFromBundle, deleteAiDraft, deletePendingAiDrafts } from "@/lib/artifacts/accept-draft";
 import { emit } from "@/lib/events";
 import { parseConops, type ConopsData, type ArtifactType } from "@/lib/artifacts/schema";
 import {
@@ -17,6 +17,7 @@ import {
   type ArtifactCounts,
 } from "@/lib/artifacts/existing-summary";
 import { filterNewArtifacts } from "@/lib/artifacts/dedupe-drafts";
+import { generateTasksFromMarkdown } from "@/lib/ai/markdown-task-generator";
 
 async function requireWrite(projectId: string) {
   const session = await getSession();
@@ -62,11 +63,7 @@ export async function generateArtifactsWithAi(
 
   let rejectedPending = 0;
   if (mode === "replace_pending") {
-    const result = await prisma.aiDraft.updateMany({
-      where: { projectId, status: "pending", artifactType: { in: types } },
-      data: { status: "rejected" },
-    });
-    rejectedPending = result.count;
+    rejectedPending = await deletePendingAiDrafts({ projectId, artifactTypes: types });
   }
 
   const summary = await getExistingArtifactSummary(projectId);
@@ -140,15 +137,86 @@ export async function importProjectJson(projectId: string, raw: string, applyCon
   return count;
 }
 
+export async function generateTasksFromMarkdownAction(
+  projectId: string,
+  markdown: string,
+): Promise<GenerateResult> {
+  const session = await requireWrite(projectId);
+  if (!(await aiEnabled())) throw new Error("IA nao configurada. Va em Configuracoes.");
+
+  const text = markdown.trim();
+  if (!text) throw new Error("Cole ou envie um arquivo Markdown com o conteudo a processar.");
+
+  const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
+  const existingTasks = await prisma.task.findMany({
+    where: { projectId },
+    select: { title: true },
+  });
+  const pending = await prisma.aiDraft.findMany({
+    where: { projectId, status: "pending", artifactType: "task" },
+    select: { artifactType: true, payload: true },
+  });
+
+  const existingTitles = [
+    ...existingTasks.map((t) => t.title),
+    ...pending.map((d) => {
+      try {
+        const p = JSON.parse(d.payload) as { title?: string };
+        return p.title ?? "";
+      } catch {
+        return "";
+      }
+    }),
+  ].filter(Boolean);
+
+  let bundle = await generateTasksFromMarkdown(text, project.name, existingTitles);
+  const summary = await getExistingArtifactSummary(projectId);
+  const existingKeys = collectExistingKeys(summary, pending, {
+    requirements: [],
+    tasks: existingTasks,
+    deliverables: [],
+    workPackages: [],
+    milestones: [],
+    systemElements: [],
+    verificationCases: [],
+  });
+
+  const filtered = filterNewArtifacts(
+    { version: bundle.version, exportedAt: new Date().toISOString(), tasks: bundle.tasks },
+    existingKeys,
+    ["task"],
+  );
+  bundle = filtered.bundle;
+  const skipped = filtered.skipped;
+
+  const created = await createDraftsFromBundle(projectId, { tasks: bundle.tasks }, "ai", session.id);
+  revalidatePath(`/projects/${projectId}`);
+  return { created, skipped, rejectedPending: 0 };
+}
+
 export async function acceptDraft(draftId: string, projectId: string) {
   const session = await requireWrite(projectId);
   await acceptAiDraft(draftId, session.id);
   revalidatePath(`/projects/${projectId}`);
 }
 
+export async function acceptDraftsBulk(draftIds: string[], projectId: string) {
+  const session = await requireWrite(projectId);
+  for (const draftId of draftIds) {
+    await acceptAiDraft(draftId, session.id);
+  }
+  revalidatePath(`/projects/${projectId}`);
+}
+
 export async function rejectDraft(draftId: string, projectId: string) {
   await requireWrite(projectId);
-  await prisma.aiDraft.update({ where: { id: draftId }, data: { status: "rejected" } });
+  await deleteAiDraft(draftId, projectId);
+  revalidatePath(`/projects/${projectId}`);
+}
+
+export async function rejectDraftsBulk(draftIds: string[], projectId: string) {
+  await requireWrite(projectId);
+  await deletePendingAiDrafts({ projectId, ids: draftIds });
   revalidatePath(`/projects/${projectId}`);
 }
 

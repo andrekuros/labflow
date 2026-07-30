@@ -34,3 +34,11 @@ export async function setSidebarCollapsed(collapsed: boolean) {
   const current = await getUserPreferences();
   await saveUserPreferences({ ...current, sidebarCollapsed: collapsed });
 }
+
+export async function setWorkspacePrefs(workspace: UserPreferences["workspace"]) {
+  const current = await getUserPreferences();
+  await saveUserPreferences({
+    ...current,
+    workspace: workspace ?? current.workspace,
+  });
+}

@@ -8,14 +8,22 @@ import {
   markNotificationReadAction,
   markAllNotificationsReadAction,
 } from "@/app/actions/notifications";
+import { cn } from "@/lib/utils";
 
-export function NotificationBell({ initialUnread }: { initialUnread: number }) {
+export function NotificationBell({
+  initialUnread,
+  variant = "sidebar",
+}: {
+  initialUnread: number;
+  variant?: "sidebar" | "icon";
+}) {
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(initialUnread);
   const [items, setItems] = useState<
     { id: string; kind: string; title: string; message: string; href: string | null; read: boolean; createdAt: string }[]
   >([]);
   const [pending, start] = useTransition();
+  const iconOnly = variant === "icon";
 
   function load() {
     start(async () => {
@@ -31,16 +39,28 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
   }, [open]);
 
   return (
-    <div className="relative px-2 pb-2">
+    <div className={cn("relative", !iconOnly && "px-2 pb-2")}>
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="relative flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-muted transition hover:bg-surface2 hover:text-fg"
+        title="Notificacoes"
+        aria-label="Notificacoes"
+        className={cn(
+          "relative flex items-center gap-2 text-sm text-muted transition hover:bg-surface2 hover:text-fg",
+          iconOnly
+            ? "h-9 w-9 justify-center rounded-lg"
+            : "w-full rounded-lg px-2.5 py-2",
+        )}
       >
         <Bell size={17} />
-        <span>Notificacoes</span>
+        {!iconOnly && <span>Notificacoes</span>}
         {unread > 0 && (
-          <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-medium text-brand-fg">
+          <span
+            className={cn(
+              "flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-medium text-brand-fg",
+              iconOnly ? "absolute -right-0.5 -top-0.5 h-4 min-w-4" : "ml-auto",
+            )}
+          >
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -49,7 +69,12 @@ export function NotificationBell({ initialUnread }: { initialUnread: number }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-full left-2 right-2 z-50 mb-1 max-h-80 overflow-y-auto rounded-xl border border-border bg-surface shadow-xl">
+          <div
+            className={cn(
+              "absolute z-50 max-h-80 w-80 overflow-y-auto rounded-xl border border-border bg-surface shadow-xl",
+              iconOnly ? "right-0 top-full mt-1" : "bottom-full left-2 right-2 mb-1 w-auto",
+            )}
+          >
             <div className="flex items-center justify-between border-b border-border px-3 py-2">
               <p className="text-xs font-semibold">Notificacoes</p>
               {unread > 0 && (

@@ -1,7 +1,9 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { chat, aiEnabled, type ChatMessage } from "@/lib/ai/provider";
+import type { SessionUser } from "@/lib/auth";
 import { search, type SearchHit } from "@/lib/ai/rag";
+import { filterRagHitsForUser } from "@/lib/knowledge-access";
 import { listAiTools } from "@/plugins/registry";
 
 export type AgentSource = { type: string; id: string; title: string; score: number };
@@ -40,9 +42,10 @@ async function resolveSources(hits: SearchHit[]): Promise<AgentSource[]> {
  */
 export async function askKnowledge(
   question: string,
-  opts: { projectId?: string | null; instructions?: string } = {},
+  opts: { projectId?: string | null; instructions?: string; user?: SessionUser | null } = {},
 ): Promise<AgentAnswer> {
-  const hits = await search(question, { projectId: opts.projectId, limit: 6 });
+  const rawHits = await search(question, { projectId: opts.projectId, limit: 6 });
+  const hits = await filterRagHitsForUser(rawHits, opts.user ?? null);
   const sources = await resolveSources(hits);
 
   const contextBlock = hits.length

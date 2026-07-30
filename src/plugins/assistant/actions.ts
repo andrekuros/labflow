@@ -13,7 +13,7 @@ export async function askAssistant(input: { question: string; agentKey?: string 
     ? await prisma.agentConfig.findUnique({ where: { key: input.agentKey } })
     : null;
 
-  const result = await askKnowledge(input.question, { instructions: agent?.instructions });
+  const result = await askKnowledge(input.question, { instructions: agent?.instructions, user: session });
 
   if (agent) {
     await prisma.agentRun.create({

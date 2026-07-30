@@ -1,13 +1,14 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds, writableMap } from "@/lib/projects";
+import { workspaceProjectIds } from "@/lib/workspace";
+import { writableMap } from "@/lib/projects";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { SystemModelClient } from "@/components/planning/system-model-client";
 import { buildBddDiagram, buildContextDiagram } from "@/lib/se/diagrams";
 
 export default async function SystemModelPage() {
   const session = await requireUser();
-  const ids = await viewableProjectIds(session);
+  const ids = await workspaceProjectIds(session);
   if (ids.length === 0) return <EmptyState title="Nenhum projeto" description="Participe de um projeto para modelar o sistema." />;
 
   const [projects, elements, interfaces, canWrite] = await Promise.all([

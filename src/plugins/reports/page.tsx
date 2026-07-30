@@ -1,5 +1,7 @@
 import { requireUser } from "@/lib/rbac";
+import { canViewAllReports } from "@/lib/user-access";
 import { prisma } from "@/lib/db";
+import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
 import { EmptyState } from "@/components/ui";
 import { ReportsClient } from "@/components/reports/reports-client";
 import { getUserActivitySummary, getTeamOverview } from "@/plugins/reports/actions";
@@ -14,7 +16,7 @@ export default async function ReportsPage({
   await ensurePluginRegistry();
   const params = await searchParams;
 
-  const isAdmin = session.role === "admin" || session.role === "project_manager";
+  const isAdmin = canViewAllReports(session);
   const settings = getPluginSettings("reports");
   const periodDays = Number(settings.reportPeriodDays ?? 14);
   const includeAcademic = Boolean(settings.includeAcademic ?? true);
@@ -27,12 +29,35 @@ export default async function ReportsPage({
   const targetUserId = isAdmin && params.user ? params.user : session.id;
 
   const users = isAdmin
-    ? await prisma.user.findMany({
+    ? (await prisma.user.findMany({
         where: { accountStatus: "active" },
-        select: { id: true, name: true, role: true, title: true, avatarColor: true },
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          avatarColor: true,
+          profiles: { select: { profile: true } },
+        },
         orderBy: { name: "asc" },
+      })).map((u) => {
+        const profiles = u.profiles.length
+          ? normalizeProfiles(u.profiles.map((p) => p.profile))
+          : legacyRoleToProfiles(u.role);
+        return {
+          id: u.id,
+          name: u.name,
+          role: u.role,
+          profilesLabel: formatProfilesLabel(profiles),
+          avatarColor: u.avatarColor,
+        };
       })
-    : [{ id: session.id, name: session.name, role: session.role, title: null, avatarColor: "#6366f1" }];
+    : [{
+        id: session.id,
+        name: session.name,
+        role: session.role,
+        profilesLabel: formatProfilesLabel(session.profiles ?? legacyRoleToProfiles(session.role)),
+        avatarColor: "#6366f1",
+      }];
 
   if (viewMode === "bi") {
     const teamData = await getTeamOverview(from, to);

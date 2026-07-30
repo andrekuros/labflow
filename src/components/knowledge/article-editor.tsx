@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Save, Pencil, Trash2, ExternalLink, Cloud } from "lucide-react";
 import { Button, Input, Textarea, Badge } from "@/components/ui";
+import { AdminOnlyBadge } from "@/components/knowledge/admin-only-badge";
 import { updateArticle, deleteArticle } from "@/plugins/knowledge/actions";
 import { formatDate } from "@/lib/utils";
 import { MarkdownView } from "@/components/markdown/markdown-view";
@@ -14,12 +15,14 @@ export function ArticleEditor({
   canDelete,
   externalSource,
   nextcloudFileUrl,
+  adminOnly = false,
 }: {
   article: { id: string; title: string; content: string; tags: string; author: string; updatedAt: string };
   canEdit: boolean;
   canDelete: boolean;
   externalSource?: string | null;
   nextcloudFileUrl?: string | null;
+  adminOnly?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
@@ -54,6 +57,7 @@ export function ArticleEditor({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-semibold">{article.title}</h1>
+              {adminOnly && <AdminOnlyBadge />}
               {isNextcloud && <Badge className="bg-surface2 text-muted">Nextcloud</Badge>}
             </div>
             <p className="mt-1 text-xs text-muted">por {article.author} - atualizado {formatDate(article.updatedAt)}</p>

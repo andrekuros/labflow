@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds } from "@/lib/projects";
+import { workspaceProjectIds } from "@/lib/workspace";
 import { Card, Badge, PageHeader, EmptyState } from "@/components/ui";
 import { formatDate } from "@/lib/utils";
 import { NewChannelButton, NewThreadButton } from "@/components/forum/forum-client";
@@ -9,7 +9,7 @@ import { MessageSquare, CheckCircle2, Pin } from "lucide-react";
 
 export default async function ForumPage() {
   const session = await requireUser();
-  const ids = await viewableProjectIds(session);
+  const ids = await workspaceProjectIds(session);
 
   const channels = await prisma.channel.findMany({
     where: { OR: [{ projectId: null }, { projectId: { in: ids } }] },

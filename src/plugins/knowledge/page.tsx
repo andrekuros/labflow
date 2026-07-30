@@ -1,7 +1,9 @@
 import { requireUser, hasPermission } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { articleVisibilityWhere } from "@/lib/knowledge-access";
-import { viewableProjectIds } from "@/lib/projects";
+import { getAdminOnlyFolders } from "@/lib/knowledge-access";
+import { articleIsAdminOnly } from "@/plugins/knowledge/folder-path";
+import { workspaceProjectIds } from "@/lib/workspace";
 import { getNextcloudSettingsForUi } from "@/plugins/knowledge/nextcloud-config";
 import { buildFolderTree } from "@/plugins/knowledge/folder-tree";
 import { computeKnowledgeHealth } from "@/plugins/knowledge/health";
@@ -27,18 +29,26 @@ export default async function KnowledgePage({
   ]);
 
   const visibility = await articleVisibilityWhere(session);
+  const wsIds = await workspaceProjectIds(session);
+  const scopedVisibility = {
+    AND: [
+      visibility,
+      { OR: [{ projectId: null }, { projectId: { in: wsIds } }] },
+    ],
+  };
+  const adminFolders = getAdminOnlyFolders();
 
   const [totalCount, articles, projects, nextcloud, healthReport, settings] = await Promise.all([
-    prisma.knowledgeArticle.count({ where: visibility }),
+    prisma.knowledgeArticle.count({ where: scopedVisibility }),
     prisma.knowledgeArticle.findMany({
-      where: visibility,
+      where: scopedVisibility,
       include: { project: true, author: true },
       orderBy: { updatedAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
     prisma.project.findMany({
-      where: { id: { in: await viewableProjectIds(session) } },
+      where: { id: { in: wsIds } },
       orderBy: { name: "asc" },
     }),
     canManage ? getNextcloudSettingsForUi() : Promise.resolve(null),
@@ -85,9 +95,11 @@ export default async function KnowledgePage({
           externalSource: a.externalSource,
           externalFolder: a.externalFolder,
           externalStatus: a.externalStatus,
+          adminOnly: articleIsAdminOnly(a, adminFolders),
         }))}
         pagination={{ page, totalPages, totalCount, pageSize: PAGE_SIZE }}
         initialFolder={folder ?? "all"}
+        adminOnlyFolders={adminFolders}
       />
     </div>
   );

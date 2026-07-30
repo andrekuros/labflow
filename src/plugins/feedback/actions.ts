@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { chat, aiEnabled, type ChatMessage } from "@/lib/ai/provider";
 import { search } from "@/lib/ai/rag";
 
-export type FeedbackCategory = "bug" | "suggestion" | "question" | "equipment";
+export type FeedbackCategory = "bug" | "suggestion" | "question" | "equipment" | "need";
 
 export type FeedbackInput = {
   title: string;
@@ -249,8 +249,9 @@ export async function acceptFeedbackDraft(draftId: string) {
 }
 
 export async function rejectFeedbackDraft(draftId: string) {
-  const user = await requireUser();
-  await prisma.aiDraft.update({ where: { id: draftId }, data: { status: "rejected" } });
+  await requireUser();
+  const { deleteAiDraft } = await import("@/lib/artifacts/accept-draft");
+  await deleteAiDraft(draftId);
   return { ok: true };
 }
 
@@ -279,7 +280,9 @@ export async function getLinkedDrafts(feedbackIds: string[]) {
 
   const result: Record<string, typeof drafts> = {};
   for (const [fbId, ids] of Object.entries(fbToDrafts)) {
-    const resolved = ids.map((id) => draftsById[id]).filter(Boolean);
+    const resolved = ids
+      .map((id) => draftsById[id])
+      .filter((d) => d && d.status !== "rejected");
     if (resolved.length > 0) result[fbId] = resolved;
   }
   return result;

@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/db";
 import { ingest } from "@/lib/ai/rag";
 import { parseConops } from "@/lib/artifacts/schema";
+import { parseChecklist } from "@/lib/task-checklist";
 
 export async function indexUser(userId: string) {
   const user = await prisma.user.findUnique({
@@ -32,7 +33,6 @@ export async function indexUser(userId: string) {
     `Usuario: ${user.name}`,
     `Email: ${user.email}`,
     `Papel: ${user.role}`,
-    user.title ? `Titulo: ${user.title}` : "",
     projects ? `Projetos: ${projects}` : "",
     academicText,
   ]
@@ -46,7 +46,7 @@ export async function indexProject(projectId: string) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
-      memberships: { include: { user: { select: { name: true, role: true, title: true } } } },
+      memberships: { include: { user: { select: { name: true, role: true } } } },
       _count: {
         select: { tasks: true, requirements: true, deliverables: true, workPackages: true },
       },
@@ -95,6 +95,12 @@ export async function indexTask(taskId: string) {
     task.assignees.length ? `Responsaveis: ${task.assignees.map((a) => a.name).join(", ")}` : "",
     task.labels.length ? `Categorias: ${task.labels.map((l) => l.name).join(", ")}` : "",
     task.dueDate ? `Prazo: ${task.dueDate.toISOString().slice(0, 10)}` : "",
+    (() => {
+      const steps = parseChecklist(task.checklistJson);
+      return steps.length
+        ? `Checklist: ${steps.map((s) => `${s.done ? "[x]" : "[ ]"} ${s.title}`).join("; ")}`
+        : "";
+    })(),
   ]
     .filter(Boolean)
     .join("\n");
@@ -105,7 +111,7 @@ export async function indexTask(taskId: string) {
 export async function indexAcademicProfile(userId: string) {
   const profile = await prisma.academicProfile.findUnique({
     where: { userId },
-    include: { user: { select: { name: true, email: true, role: true, title: true } } },
+    include: { user: { select: { name: true, email: true, role: true } } },
   });
   if (!profile) return;
 

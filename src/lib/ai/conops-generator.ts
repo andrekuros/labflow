@@ -11,6 +11,7 @@ const TYPE_LABELS: Record<ArtifactType, string> = {
   milestone: "milestones",
   system_element: "systemElements",
   verification_case: "verificationCases",
+  sprint_plan: "sprintPlans",
 };
 
 export type GenerationMode = "complement" | "replace_pending" | "append";

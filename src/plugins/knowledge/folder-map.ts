@@ -1,5 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/db";
+import { isPathUnderFolders } from "@/plugins/knowledge/folder-path";
+
+export { isPathUnderFolders, articleIsAdminOnly } from "@/plugins/knowledge/folder-path";
 
 export type FolderProjectMap = Record<string, string>;
 
@@ -10,13 +13,7 @@ export function parentFolderFromPath(filePath: string): string {
 }
 
 export function isExcludedPath(filePath: string, excludeFolders: string[]): boolean {
-  const normalized = filePath.replace(/\\/g, "/");
-  for (const ex of excludeFolders) {
-    const folder = ex.replace(/^\/+|\/+$/g, "");
-    if (!folder) continue;
-    if (normalized === folder || normalized.startsWith(`${folder}/`)) return true;
-  }
-  return false;
+  return isPathUnderFolders(filePath, excludeFolders);
 }
 
 /** Resolve project id from frontmatter and folder→project map (keys or ids). */

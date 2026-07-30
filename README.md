@@ -22,7 +22,8 @@ Repositorio: https://github.com/andrekuros/labflow
 12. [Plugins](#plugins)
 13. [Estrutura do projeto](#estrutura-do-projeto)
 14. [Producao e PostgreSQL](#producao-e-postgresql)
-15. [Solucao de problemas](#solucao-de-problemas)
+15. [Desenvolvimento com IA (Cursor)](#desenvolvimento-com-ia-cursor)
+16. [Solucao de problemas](#solucao-de-problemas)
 
 ---
 
@@ -40,6 +41,8 @@ Repositorio: https://github.com/andrekuros/labflow
 | **Foruns** | Canais e topicos por projeto, com atualizacao near-realtime |
 | **Equipe** | Perfis com tarefas, projetos e visao geral de cada integrante |
 | **Assistente IA** | Respostas baseadas no conhecimento acumulado (RAG) |
+| **Planejamento** | Visao unificada de requisitos, entregaveis, roadmap e sprints por projeto |
+| **Relatorios** | Atividades por usuario/periodo e painel BI (admin) |
 | **Plugins** | Extensibilidade via eventos, ferramentas de IA e slots de UI |
 | **Temas** | 8 paletas x modo claro/escuro (16 combinacoes) |
 
@@ -269,8 +272,11 @@ O seed cria dois projetos de exemplo (**NEURO** e **ROBO**) com tarefas, sprints
 /roadmap          Linha do tempo de marcos
 /knowledge        Base de conhecimento + busca semantica
 /forum            Foruns por canal/projeto
+/planning         Planejamento unificado por projeto
 /assistant        Assistente de IA (RAG)
 /team             Equipe e perfis individuais (/team/[id])
+/reports          Relatorios de atividade e BI
+/feedback         Reportar bugs e sugerir melhorias
 /plugins          Plugins instalados
 ```
 
@@ -282,11 +288,13 @@ O seed cria dois projetos de exemplo (**NEURO** e **ROBO**) com tarefas, sprints
 
 | Papel | Descricao |
 |-------|-----------|
-| `admin` | Acesso total; gerencia usuarios |
+| `admin` | Acesso total; gerencia usuarios e permissoes |
 | `researcher` | Pesquisador / orientador |
-| `phd` | Doutorando |
-| `msc` | Mestrando |
-| `student` | Aluno de IC / graduacao |
+| `project_manager` | Gerente de projetos |
+| `contributor` | Colaborador |
+| `viewer` | Somente leitura |
+
+Programa academico (mestrado, doutorado, etc.) fica em **Perfil Academico**, nao em `User.role`.
 
 ### Papel por projeto
 
@@ -339,6 +347,10 @@ Registre plugins em `src/plugins/index.ts`. Veja o exemplo em `src/plugins/examp
 
 ```
 labflow/
+├── AGENTS.md               # Guia para agentes de IA
+├── docs/CURSOR.md          # Guia de uso do Cursor
+├── .cursor/skills/         # Skills do projeto
+├── .cursor/rules/          # Regras persistentes
 ├── prisma/
 │   ├── schema.prisma       # Modelo de dados (User, Project, Task, ...)
 │   └── seed.ts             # Dados de demonstracao
@@ -383,6 +395,21 @@ Para ambientes de laboratorio com varios usuarios simultaneos, migre para Postgr
 5. Sirva atras de um reverse proxy (Nginx/Caddy) com HTTPS
 
 Os embeddings sao armazenados como JSON (portavel). Para escala maior com pgvector, troque a coluna `Embedding.vector` por tipo `vector` e ajuste `src/lib/ai/rag.ts`.
+
+---
+
+## Desenvolvimento com IA (Cursor)
+
+Documentacao para agentes de IA e desenvolvedores usando Cursor:
+
+| Arquivo | Conteudo |
+|---------|----------|
+| [AGENTS.md](AGENTS.md) | Arquitetura, modulos, convenções — leitura principal para IA |
+| [docs/CURSOR.md](docs/CURSOR.md) | Como usar Cursor, skills e prompts eficazes |
+| [.cursor/skills/](.cursor/skills/) | Skills: `labflow-dev`, `labflow-plugin`, `labflow-ai` |
+| [.cursor/rules/](.cursor/rules/) | Regras automaticas por tipo de arquivo |
+
+Artigos de desenvolvimento tambem sao indexados na base de conhecimento apos `npm run setup`.
 
 ---
 

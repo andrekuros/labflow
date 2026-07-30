@@ -1,18 +1,31 @@
 import { formatDate } from "@/lib/utils";
 import type { UserActivitySummary } from "@/plugins/reports/actions";
+import type { AiNarrative } from "@/plugins/reports/ai-sections";
 
-export function generateReportMarkdown(data: UserActivitySummary): string {
+export function generateReportMarkdown(
+  data: UserActivitySummary,
+  narrative?: AiNarrative | null,
+): string {
   const lines: string[] = [];
   const fromStr = formatDate(data.period.from);
   const toStr = formatDate(data.period.to);
 
   lines.push(`# Relatorio de Atividades - ${data.user.name}`);
   lines.push(`**Periodo:** ${fromStr} a ${toStr}`);
-  lines.push(`**Papel:** ${data.user.role}${data.user.title ? ` | **Titulo:** ${data.user.title}` : ""}`);
+  lines.push(`**Perfis:** ${data.user.profilesLabel}`);
   if (data.academic) {
     lines.push(`**Programa:** ${data.academic.program} (${data.academic.status})`);
   }
+  if (narrative?.aiUsed) {
+    lines.push(`**Analise:** com IA`);
+  }
   lines.push("");
+
+  if (narrative?.executiveSummary) {
+    lines.push("## Resumo executivo");
+    lines.push(narrative.executiveSummary);
+    lines.push("");
+  }
 
   lines.push("## Resumo");
   lines.push(`- Tarefas concluidas: ${data.kpis.tasksCompleted}`);
@@ -61,6 +74,27 @@ export function generateReportMarkdown(data: UserActivitySummary): string {
     for (const ev of data.timeline.slice(0, 30)) {
       lines.push(`- ${formatDate(ev.createdAt)} - ${ev.label}${ev.projectKey ? ` [${ev.projectKey}]` : ""}`);
     }
+    lines.push("");
+  }
+
+  if (narrative?.highlights) {
+    lines.push("## Destaques (IA)");
+    lines.push(narrative.highlights);
+    lines.push("");
+  }
+  if (narrative?.pendenciesAndRisks) {
+    lines.push("## Pendencias e riscos (IA)");
+    lines.push(narrative.pendenciesAndRisks);
+    lines.push("");
+  }
+  if (narrative?.workflowImprovements) {
+    lines.push("## Melhorias de fluxo (IA)");
+    lines.push(narrative.workflowImprovements);
+    lines.push("");
+  }
+  if (narrative?.otherSuggestions) {
+    lines.push("## Outras sugestoes (IA)");
+    lines.push(narrative.otherSuggestions);
     lines.push("");
   }
 

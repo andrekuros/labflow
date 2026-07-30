@@ -1,9 +1,10 @@
 import { getSession } from "@/lib/auth";
+import { isAdminUser } from "@/lib/user-access";
 import { createBackupArchive } from "@/lib/backup";
 
 export async function GET() {
   const session = await getSession();
-  if (!session || session.role !== "admin") {
+  if (!session || !isAdminUser(session)) {
     return new Response("Sem permissao", { status: 403 });
   }
 

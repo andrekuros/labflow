@@ -1,9 +1,11 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds, writableMap } from "@/lib/projects";
+import { workspaceProjectIds } from "@/lib/workspace";
+import { writableMap } from "@/lib/projects";
 import { ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
 import { EmptyState } from "@/components/ui";
 import { PlanningPage } from "@/components/planning/planning-page";
+import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
 
 export default async function PlanningPluginPage({
   searchParams,
@@ -13,7 +15,7 @@ export default async function PlanningPluginPage({
   const session = await requireUser();
   await ensurePluginRegistry();
   const { project: projectParam, tab } = await searchParams;
-  const ids = await viewableProjectIds(session);
+  const ids = await workspaceProjectIds(session);
 
   if (ids.length === 0) {
     return <EmptyState title="Nenhum projeto" description="Participe de um projeto para acessar o planejamento." />;
@@ -27,7 +29,7 @@ export default async function PlanningPluginPage({
   const selectedId = projectParam && ids.includes(projectParam) ? projectParam : ids[0];
   const canWrite = await writableMap(session, ids);
 
-  const [requirements, deliverables, milestones, sprints, workPackages, systemElements, reqStats] =
+  const [requirements, deliverables, milestones, sprints, workPackages, systemElements, reqStats, memberships] =
     await Promise.all([
       prisma.requirement.findMany({
         where: { projectId: selectedId },
@@ -62,10 +64,49 @@ export default async function PlanningPluginPage({
         where: { projectId: selectedId },
         _count: true,
       }),
+      prisma.projectMembership.findMany({
+        where: { projectId: selectedId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              role: true,
+              profiles: { select: { profile: true } },
+              _count: {
+                select: {
+                  assignedTasks: {
+                    where: { projectId: selectedId, status: { not: "done" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { user: { name: "asc" } },
+      }),
     ]);
 
   const roadmapSettings = getPluginSettings("roadmap");
   const showSprintsOnRoadmap = roadmapSettings.showSprints !== false;
+  const sprintSettings = getPluginSettings("sprints");
+  const defaultDurationWeeks =
+    typeof sprintSettings.defaultDurationWeeks === "number" && sprintSettings.defaultDurationWeeks > 0
+      ? sprintSettings.defaultDurationWeeks
+      : 2;
+
+  const sprintMembers = memberships.map((m) => {
+    const profiles = m.user.profiles.length
+      ? normalizeProfiles(m.user.profiles.map((p) => p.profile))
+      : legacyRoleToProfiles(m.user.role);
+    return {
+      userId: m.user.id,
+      name: m.user.name,
+      role: m.role,
+      profilesLabel: formatProfilesLabel(profiles),
+      openTaskCount: m.user._count.assignedTasks,
+    };
+  });
 
   const mappedReqs = requirements.map((r) => ({
     id: r.id, code: r.code, title: r.title, description: r.description,
@@ -124,6 +165,9 @@ export default async function PlanningPluginPage({
       showSprintsOnRoadmap={showSprintsOnRoadmap}
       reqApproved={approved}
       reqTotal={totalReqs}
+      sprintMembers={sprintMembers}
+      sprintCount={sprints.length}
+      defaultDurationWeeks={defaultDurationWeeks}
     />
   );
 }

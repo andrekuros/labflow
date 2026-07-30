@@ -64,6 +64,8 @@ export type PluginLifecycleContext = {
 };
 
 export type PluginLifecycleHooks = {
+  /** Called once after registry init when the plugin is already enabled (server boot / redeploy). */
+  onBoot?: (ctx: PluginLifecycleContext) => void | Promise<void>;
   onEnable?: (ctx: PluginLifecycleContext) => void | Promise<void>;
   onDisable?: (ctx: PluginLifecycleContext) => void | Promise<void>;
   onSettingsChange?: (

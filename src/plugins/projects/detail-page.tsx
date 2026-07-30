@@ -1,39 +1,47 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { canViewProject, canWriteProject } from "@/lib/rbac";
-import { Card, Badge, Avatar, PageHeader, LinkButton } from "@/components/ui";
-import { AddWorkPackageForm, AddLabelForm, AddMemberForm } from "@/components/projects/project-forms";
-import { ProjectCockpit } from "@/components/projects/project-cockpit";
-import { ConopsPanel } from "@/components/projects/conops-panel";
-import { AiDraftsPanel } from "@/components/projects/ai-drafts-panel";
-import { ArtifactsIo } from "@/components/projects/artifacts-io";
+import { canViewProject, canWriteProject, canManageProject, canAssignProjectLead } from "@/lib/rbac";
+import { ProjectDetailClient } from "@/components/projects/project-detail-client";
 import { parseConops } from "@/lib/artifacts/schema";
 import { getExistingArtifactSummary } from "@/lib/artifacts/existing-summary";
-import { KanbanSquare } from "lucide-react";
+import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
+import { getProjectBoardSettings } from "@/plugins/projects/actions";
+import { computeWbsProgressMap, computeProjectProgress } from "@/lib/wbs-progress";
+import { parseChecklist, checklistProgress } from "@/lib/task-checklist";
+import { isProjectKind, parseProjectFeatures } from "@/lib/projects/features";
+import { parseAcademicMeta } from "@/lib/projects/academic-meta";
+import { parsePaperMeta } from "@/lib/projects/paper-meta";
+import { PROJECT_BUNDLE_FORMAT_DOC_TITLE } from "@/lib/data-transfer/format-doc";
 
-const WBS_STATUS: Record<string, string> = { planned: "Planejada", in_progress: "Em andamento", done: "Concluida", blocked: "Bloqueada" };
-
-export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { id } = await params;
+  const { tab } = await searchParams;
   const session = await requireUser();
   if (!(await canViewProject(session, id))) notFound();
   const writable = await canWriteProject(session, id);
+  const canManage = await canManageProject(session, id);
+  const canAssignLead = canAssignProjectLead(session);
 
   const project = await prisma.project.findUnique({
     where: { id },
     include: {
       workPackages: { orderBy: [{ order: "asc" }], include: { _count: { select: { tasks: true } } } },
       labels: true,
-      memberships: { include: { user: true } },
+      memberships: { include: { user: { include: { profiles: { select: { profile: true } } } } } },
       sprints: { orderBy: { createdAt: "desc" } },
       _count: { select: { tasks: true, deliverables: true, requirements: true } },
     },
   });
   if (!project) notFound();
 
-  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount, pendingDrafts, formatDoc, artifactSummary] = await Promise.all([
+  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount, pendingDrafts, formatDoc, projectBundleFormatDoc, artifactSummary] = await Promise.all([
     prisma.task.count({ where: { projectId: id, status: { not: "done" } } }),
     prisma.deliverable.findMany({
       where: { projectId: id, status: { notIn: ["accepted", "rejected"] } },
@@ -62,6 +70,10 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       where: { title: "Formato JSON de artefatos LabFlow", projectId: null },
       select: { id: true },
     }),
+    prisma.knowledgeArticle.findFirst({
+      where: { title: PROJECT_BUNDLE_FORMAT_DOC_TITLE, projectId: null },
+      select: { id: true },
+    }),
     getExistingArtifactSummary(id),
   ]);
 
@@ -84,159 +96,173 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
     : [];
 
   const activeSprint = project.sprints.find((s) => s.status === "active") ?? project.sprints[0] ?? null;
+  const boardColumns = await getProjectBoardSettings(id);
 
-  const allUsers = await prisma.user.findMany();
+  const projectTasks = await prisma.task.findMany({
+    where: { projectId: id },
+    include: {
+      assignees: { select: { id: true, name: true, avatarColor: true } },
+      sprint: { select: { id: true, name: true } },
+      workPackage: { select: { id: true, code: true, name: true } },
+      labels: { select: { id: true, name: true, color: true } },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const wbsNodes = project.workPackages.map((w) => ({ id: w.id, parentId: w.parentId }));
+  const taskProgressInputs = projectTasks.map((t) => ({
+    id: t.id,
+    workPackageId: t.workPackageId,
+    status: t.status,
+    estimate: t.estimate,
+  }));
+  const wbsProgressMap = computeWbsProgressMap(wbsNodes, taskProgressInputs);
+  const projectProgress = computeProjectProgress(taskProgressInputs);
+
+  const allUsers = await prisma.user.findMany({
+    where: { accountStatus: "active" },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
   const memberIds = new Set(project.memberships.map((m) => m.userId));
   const candidates = allUsers.filter((u) => !memberIds.has(u.id)).map((u) => ({ id: u.id, name: u.name }));
-
-  const roots = project.workPackages.filter((w) => !w.parentId);
-  const childrenOf = (pid: string) => project.workPackages.filter((w) => w.parentId === pid);
-
-  function Tree({ nodeId, depth }: { nodeId: string; depth: number }) {
-    const node = project!.workPackages.find((w) => w.id === nodeId)!;
-    const kids = childrenOf(nodeId);
-    return (
-      <div>
-        <div className="flex items-center justify-between rounded-lg px-2 py-1.5 hover:bg-surface2" style={{ marginLeft: depth * 16 }}>
-          <div className="flex items-center gap-2 text-sm">
-            {node.code && <span className="font-mono text-xs text-muted">{node.code}</span>}
-            <span>{node.name}</span>
-            <Badge className="bg-surface2 text-muted">{WBS_STATUS[node.status] ?? node.status}</Badge>
-          </div>
-          <span className="text-xs text-muted">{node._count.tasks} tarefas</span>
-        </div>
-        {kids.map((k) => <Tree key={k.id} nodeId={k.id} depth={depth + 1} />)}
-      </div>
-    );
-  }
+  const kind = isProjectKind(project.kind) ? project.kind : "lab";
+  const features = parseProjectFeatures(project.featuresJson, kind);
+  const academicMeta = parseAcademicMeta(project.academicJson);
+  const paperMeta = parsePaperMeta(project.paperJson);
 
   return (
-    <div>
-      <PageHeader
-        title={project.name}
-        description={project.description ?? undefined}
-        actions={<LinkButton href={`/board?project=${project.id}`}><KanbanSquare size={16} /> Abrir Kanban</LinkButton>}
-      />
-
-      <div className="mb-6 flex items-center gap-2">
-        <Badge color={project.color}>{project.key}</Badge>
-        <span className="text-sm text-muted">{project._count.tasks} tarefas - {project._count.deliverables} entregaveis - {project._count.requirements} requisitos</span>
-      </div>
-
-      <ProjectCockpit
-        project={{ id: project.id, key: project.key, name: project.name, color: project.color }}
-        activeSprint={
-          activeSprint
-            ? {
-                id: activeSprint.id,
-                name: activeSprint.name,
-                goal: activeSprint.goal,
-                endDate: activeSprint.endDate?.toISOString() ?? null,
-              }
-            : null
-        }
-        openTasks={openTasks}
-        deliverables={deliverables.map((d) => ({
+    <ProjectDetailClient
+      project={{
+        id: project.id,
+        key: project.key,
+        name: project.name,
+        color: project.color,
+        description: project.description,
+        status: project.status,
+        kind,
+        taskCount: project._count.tasks,
+        deliverableCount: project._count.deliverables,
+        requirementCount: project._count.requirements,
+      }}
+      features={features}
+      academicMeta={academicMeta}
+      paperMeta={paperMeta}
+      writable={writable}
+      canManage={canManage}
+      canAssignLead={canAssignLead}
+      boardColumns={boardColumns}
+      initialTab={tab ?? "overview"}
+      pendingDraftCount={pendingDrafts.length}
+      conops={parseConops(project.conops)}
+      formatDocId={formatDoc?.id}
+      projectBundleFormatDocId={projectBundleFormatDoc?.id}
+      artifactCounts={artifactSummary.counts}
+      drafts={pendingDrafts.map((d) => ({
+        id: d.id,
+        artifactType: d.artifactType,
+        title: d.title,
+        payload: d.payload,
+        source: d.source,
+        createdAt: d.createdAt.toISOString(),
+      }))}
+      cockpit={{
+        project: { id: project.id, key: project.key, name: project.name, color: project.color },
+        activeSprint: activeSprint
+          ? {
+              id: activeSprint.id,
+              name: activeSprint.name,
+              goal: activeSprint.goal,
+              endDate: activeSprint.endDate?.toISOString() ?? null,
+            }
+          : null,
+        openTasks,
+        deliverables: deliverables.map((d) => ({
           id: d.id,
           name: d.name,
           status: d.status,
           dueDate: d.dueDate?.toISOString() ?? null,
-        }))}
-        articles={articles.map((a) => ({
+        })),
+        articles: articles.map((a) => ({
           id: a.id,
           title: a.title,
           externalSource: a.externalSource,
           updatedAt: a.updatedAt.toISOString(),
-        }))}
-        threads={threads.map((t) => ({
+        })),
+        threads: threads.map((t) => ({
           id: t.id,
           title: t.title,
           status: t.status,
           updatedAt: t.updatedAt.toISOString(),
-        }))}
-        linkCount={linkCount}
-        seMaturity={{ approved: reqApproved, total: reqTotal }}
-        vvPassed={vvPassed}
-        vvTotal={vvTotal}
-        systemElementCount={systemElementCount}
-      />
-
-      <div className="mb-6 grid gap-6 lg:grid-cols-2">
-        <ConopsPanel
-          projectId={project.id}
-          initial={parseConops(project.conops)}
-          writable={writable}
-          formatDocId={formatDoc?.id}
-          artifactCounts={artifactSummary.counts}
-        />
-        <div className="space-y-6">
-          <AiDraftsPanel
-            projectId={project.id}
-            drafts={pendingDrafts.map((d) => ({
-              id: d.id,
-              artifactType: d.artifactType,
-              title: d.title,
-              payload: d.payload,
-              source: d.source,
-            }))}
-            writable={writable}
-          />
-          <ArtifactsIo projectId={project.id} writable={writable} />
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-2">
-          <h2 className="mb-3 text-sm font-semibold">Estrutura de trabalho (WBS)</h2>
-          <p className="mb-3 text-xs text-muted">Atividades hierarquicas no estilo da engenharia de sistemas.</p>
-          <div className="mb-4 space-y-0.5">
-            {roots.length === 0 && <p className="text-sm text-muted">Nenhuma atividade ainda.</p>}
-            {roots.map((r) => <Tree key={r.id} nodeId={r.id} depth={0} />)}
-          </div>
-          {writable && <AddWorkPackageForm projectId={project.id} parents={project.workPackages.map((w) => ({ id: w.id, name: w.name, code: w.code }))} />}
-        </Card>
-
-        <div className="space-y-6">
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold">Equipe</h2>
-            <div className="mb-3 space-y-2">
-              {project.memberships.map((m) => (
-                <div key={m.id} className="flex items-center gap-2">
-                  <Avatar name={m.user.name} color={m.user.avatarColor} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm">{m.user.name}</p>
-                    <p className="text-xs text-muted">{m.user.title ?? m.user.role}</p>
-                  </div>
-                  <Badge className="bg-surface2 text-muted">{m.role}</Badge>
-                </div>
-              ))}
-            </div>
-            {writable && <AddMemberForm projectId={project.id} candidates={candidates} />}
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold">Categorias</h2>
-            <div className="mb-3 flex flex-wrap gap-2">
-              {project.labels.length === 0 && <p className="text-sm text-muted">Nenhuma categoria.</p>}
-              {project.labels.map((l) => <Badge key={l.id} color={l.color}>{l.name}</Badge>)}
-            </div>
-            {writable && <AddLabelForm projectId={project.id} />}
-          </Card>
-
-          <Card className="p-5">
-            <h2 className="mb-3 text-sm font-semibold">Sprints</h2>
-            <div className="space-y-2">
-              {project.sprints.length === 0 && <p className="text-sm text-muted">Nenhuma sprint.</p>}
-              {project.sprints.map((s) => (
-                <Link key={s.id} href="/sprints" className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm hover:bg-surface2">
-                  <span>{s.name}</span>
-                  <Badge className="bg-surface2 text-muted">{s.status}</Badge>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        </div>
-      </div>
-    </div>
+        })),
+        linkCount,
+        seMaturity: { approved: reqApproved, total: reqTotal },
+        vvPassed,
+        vvTotal,
+        systemElementCount,
+        projectProgress: {
+          progressPct: projectProgress.progressPct,
+          doneTasks: projectProgress.doneTasks,
+          totalTasks: projectProgress.totalTasks,
+          doneWeight: projectProgress.doneWeight,
+          totalWeight: projectProgress.totalWeight,
+          unmappedTasks: projectProgress.unmappedTasks,
+        },
+      }}
+      workPackages={project.workPackages.map((w) => {
+        const metrics = wbsProgressMap.get(w.id);
+        return {
+          id: w.id,
+          parentId: w.parentId,
+          code: w.code,
+          name: w.name,
+          description: w.description,
+          status: w.status,
+          order: w.order,
+          taskCount: metrics?.totalTasks ?? w._count.tasks,
+          progressPct: metrics?.progressPct ?? 0,
+          doneTasks: metrics?.doneTasks ?? 0,
+          totalTasks: metrics?.totalTasks ?? 0,
+          doneWeight: metrics?.doneWeight ?? 0,
+          totalWeight: metrics?.totalWeight ?? 0,
+        };
+      })}
+      tasks={projectTasks.map((t) => ({
+        id: t.id,
+        title: t.title,
+        description: t.description,
+        status: t.status,
+        priority: t.priority,
+        estimate: t.estimate,
+        dueDate: t.dueDate?.toISOString() ?? null,
+        updatedAt: t.updatedAt.toISOString(),
+        workPackageId: t.workPackageId,
+        workPackageCode: t.workPackage?.code ?? null,
+        workPackageName: t.workPackage?.name ?? null,
+        sprintId: t.sprintId,
+        sprintName: t.sprint?.name ?? null,
+        assignees: t.assignees.map((a) => ({ id: a.id, name: a.name, avatarColor: a.avatarColor })),
+        labels: t.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+        checklistDone: checklistProgress(parseChecklist(t.checklistJson)).done,
+        checklistTotal: checklistProgress(parseChecklist(t.checklistJson)).total,
+      }))}
+      members={project.memberships.map((m) => {
+        const profiles = m.user.profiles?.length
+          ? normalizeProfiles(m.user.profiles.map((p) => p.profile))
+          : legacyRoleToProfiles(m.user.role);
+        return {
+          id: m.id,
+          userId: m.userId,
+          userName: m.user.name,
+          userProfilesLabel: formatProfilesLabel(profiles),
+          userRole: m.user.role,
+          avatarColor: m.user.avatarColor,
+          role: m.role,
+        };
+      })}
+      labels={project.labels.map((l) => ({ id: l.id, name: l.name, color: l.color }))}
+      sprints={project.sprints.map((s) => ({ id: s.id, name: s.name, status: s.status }))}
+      memberCandidates={candidates}
+    />
   );
 }

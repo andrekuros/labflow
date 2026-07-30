@@ -44,9 +44,21 @@ function wireManifest(manifest: PluginManifest) {
 
 export function registerPlugin(manifest: PluginManifest) {
   const s = state();
-  if (s.manifests.has(manifest.id)) return;
+  const prev = s.manifests.get(manifest.id);
   s.manifests.set(manifest.id, manifest);
-  wireManifest(manifest);
+  if (!prev) {
+    wireManifest(manifest);
+  } else if (
+    prev.name !== manifest.name ||
+    prev.version !== manifest.version ||
+    prev.description !== manifest.description ||
+    JSON.stringify(prev.nav) !== JSON.stringify(manifest.nav) ||
+    JSON.stringify(prev.settingsSchema) !== JSON.stringify(manifest.settingsSchema) ||
+    JSON.stringify(prev.defaultSettings) !== JSON.stringify(manifest.defaultSettings)
+  ) {
+    // Manifest changed (HMR / redeploy) — rebuild plugin list, nav and settings UI
+    s.initialized = false;
+  }
 }
 
 function parseJson(raw: string): Record<string, unknown> {
@@ -78,7 +90,11 @@ export async function initPluginRegistry() {
   for (const manifest of manifests) {
     await prisma.plugin.upsert({
       where: { pluginId: manifest.id },
-      update: { name: manifest.name, version: manifest.version },
+      update: {
+        name: manifest.name,
+        version: manifest.version,
+        ...(manifest.nav ? { order: manifest.nav.order } : {}),
+      },
       create: {
         pluginId: manifest.id,
         name: manifest.name,
@@ -90,7 +106,6 @@ export async function initPluginRegistry() {
   }
 
   const rows = await prisma.plugin.findMany({ orderBy: [{ order: "asc" }, { name: "asc" }] });
-  const enabledIds = new Set(rows.filter((r) => r.enabled).map((r) => r.pluginId));
 
   s.plugins = rows
     .map((row) => {
@@ -103,10 +118,23 @@ export async function initPluginRegistry() {
         order: row.order,
       } satisfies PluginRecord;
     })
-    .filter((p): p is PluginRecord => p !== null)
-    .filter((p) => !p.enabled || dependenciesMet(p, enabledIds));
+    .filter((p): p is PluginRecord => p !== null);
+  // Keep plugins with unmet deps in the registry (settings UI).
+  // Nav/runtime use listEnabledPlugins(), which filters by dependencies.
 
   s.initialized = true;
+
+  const enabledIds = new Set(s.plugins.filter((p) => p.enabled).map((p) => p.manifest.id));
+  for (const plugin of s.plugins) {
+    if (!plugin.enabled || !dependenciesMet(plugin, enabledIds)) continue;
+    const boot = plugin.manifest.lifecycle?.onBoot;
+    if (!boot) continue;
+    try {
+      await boot({ settings: plugin.settings });
+    } catch (err) {
+      console.error(`[plugins] onBoot failed for ${plugin.manifest.id}`, err);
+    }
+  }
 }
 
 export async function ensurePluginRegistry() {
@@ -122,7 +150,9 @@ export function listPlugins(): PluginRecord[] {
 }
 
 export function listEnabledPlugins(): PluginRecord[] {
-  return state().plugins.filter((p) => p.enabled);
+  const enabled = state().plugins.filter((p) => p.enabled);
+  const enabledIds = new Set(enabled.map((p) => p.manifest.id));
+  return enabled.filter((p) => dependenciesMet(p, enabledIds));
 }
 
 export function getPlugin(id: string): PluginRecord | undefined {

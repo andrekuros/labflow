@@ -1,35 +1,25 @@
 import "server-only";
 
-export const ACCOUNT_STATUSES = ["active", "pending", "rejected"] as const;
-export type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
+export { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS, type AccountStatus } from "@/lib/user-meta";
 
-export const ACCOUNT_STATUS_LABELS: Record<AccountStatus, string> = {
-  active: "Ativo",
-  pending: "Aguardando aprovacao",
-  rejected: "Rejeitado",
-};
+export {
+  SYSTEM_PROFILES,
+  PROFILE_LABELS,
+  type SystemProfile,
+  userHasProfile,
+  userHasAnyProfile,
+  resolveProfiles,
+  type SessionLike,
+} from "@/lib/profile-meta";
 
-export const SYSTEM_ROLES = ["admin", "researcher", "project_manager", "contributor", "viewer"] as const;
-export type SystemRole = (typeof SYSTEM_ROLES)[number];
+import { userHasProfile, userHasAnyProfile, type SessionLike } from "@/lib/profile-meta";
 
-export const SYSTEM_ROLE_LABELS: Record<SystemRole, string> = {
-  admin: "Administrador",
-  researcher: "Pesquisador",
-  project_manager: "Gerente de Projetos",
-  contributor: "Colaborador",
-  viewer: "Visualizador",
-};
-
-export const ACADEMIC_PROGRAMS = ["msc", "phd", "postdoc", "professor", "student"] as const;
-export type AcademicProgram = (typeof ACADEMIC_PROGRAMS)[number];
-
-export const ACADEMIC_PROGRAM_LABELS: Record<AcademicProgram, string> = {
-  msc: "Mestrando",
-  phd: "Doutorando",
-  postdoc: "Pos-doutorando",
-  professor: "Professor",
-  student: "Aluno",
-};
+export {
+  ACADEMIC_PROGRAMS,
+  ACADEMIC_PROGRAM_LABELS,
+  ACADEMIC_PROGRAM_TYPE_LABELS,
+  type AcademicProgram,
+} from "@/lib/academic-program-meta";
 
 export function canLogin(status: string): boolean {
   return status === "active";
@@ -39,6 +29,18 @@ export function isAdminRole(role: string): boolean {
   return role === "admin";
 }
 
-export function canManageUserProfiles(role: string): boolean {
-  return role === "admin";
+export function isAdminUser(user: SessionLike): boolean {
+  return userHasProfile(user, "admin");
+}
+
+export function canManageUserProfiles(user: SessionLike): boolean {
+  return isAdminUser(user);
+}
+
+export function canViewAllReports(user: SessionLike): boolean {
+  return userHasProfile(user, "admin") || userHasProfile(user, "project_manager");
+}
+
+export function canViewAcademicProfiles(user: SessionLike): boolean {
+  return userHasAnyProfile(user, ["admin", "researcher", "project_manager", "professor"]);
 }

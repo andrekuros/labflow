@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useEffect, useTransition } from "react";
 import { X, Trash2 } from "lucide-react";
 import { Button, Input, Textarea, Select, Label, Badge, Avatar } from "@/components/ui";
 import { createTask, updateTask, deleteTask } from "@/plugins/board/actions";
-import { COLUMNS, PRIORITIES, type BoardTask, type Person, type LabelItem, type SprintItem, type ProjectItem } from "@/components/board/types";
+import { PRIORITIES, type BoardTask, type Person, type LabelItem, type SprintItem, type WorkPackageItem, type ProjectItem } from "@/components/board/types";
+import { resolveBoardColumnsForView } from "@/lib/board-columns";
 import { AddCategoryDialog } from "@/components/board/add-category-dialog";
 import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
+import { TaskChecklist } from "@/components/board/task-checklist";
+import { type TaskChecklistItem } from "@/lib/task-checklist";
 
 export function TaskDialog({
   task,
@@ -16,7 +19,10 @@ export function TaskDialog({
   members,
   labels,
   sprints,
+  workPackages,
   canWrite,
+  projectColumns,
+  checklist = [],
   onClose,
   onSaved,
 }: {
@@ -27,9 +33,12 @@ export function TaskDialog({
   members: Person[];
   labels: LabelItem[];
   sprints: SprintItem[];
+  workPackages: WorkPackageItem[];
   canWrite: Record<string, boolean>;
+  projectColumns: Record<string, string[]>;
   onClose: () => void;
   onSaved: (action: "created" | "updated" | "deleted", task?: BoardTask) => void;
+  checklist?: TaskChecklistItem[];
 }) {
   const editing = !!task;
   const [projectId, setProjectId] = useState(task?.projectId ?? defaultProjectId ?? projects[0]?.id ?? "");
@@ -39,21 +48,37 @@ export function TaskDialog({
   const [priority, setPriority] = useState(task?.priority ?? "medium");
   const [dueDate, setDueDate] = useState(task?.dueDate ? task.dueDate.slice(0, 10) : "");
   const [sprintId, setSprintId] = useState(task?.sprintId ?? "");
+  const [workPackageId, setWorkPackageId] = useState(task?.workPackageId ?? "");
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task?.assignees.map((a) => a.id) ?? []);
   const [labelIds, setLabelIds] = useState<string[]>(task?.labels.map((l) => l.id) ?? []);
   const [pending, start] = useTransition();
 
   const projectLabels = labels.filter((l) => l.projectId === projectId);
   const projectSprints = sprints.filter((s) => s.projectId === projectId);
+  const projectWorkPackages = workPackages.filter((w) => w.projectId === projectId);
   const writable = canWrite[projectId] ?? false;
+
+  const statusOptions = useMemo(() => {
+    const base = resolveBoardColumnsForView(projectColumns, projectId, [status]);
+    if (!base.some((c) => c.id === status)) {
+      return [...base, { id: status, title: status }];
+    }
+    return base;
+  }, [projectColumns, projectId, status]);
+
+  useEffect(() => {
+    if (!statusOptions.some((c) => c.id === status) && statusOptions[0]) {
+      setStatus(statusOptions[0].id);
+    }
+  }, [projectId, statusOptions, status]);
 
   function toggle(list: string[], id: string, set: (v: string[]) => void) {
     set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
-  function toBoardTask(t: { id: string; title: string; description: string | null; status: string; priority: string; dueDate: Date | null; projectId: string; sprintId: string | null; workPackageId: string | null; project: { key: string; color: string }; assignees: { id: string; name: string; avatarColor: string }[]; labels: { id: string; name: string; color: string }[] }): BoardTask {
+  function toBoardTask(t: { id: string; title: string; description: string | null; status: string; order: number; priority: string; dueDate: Date | null; projectId: string; sprintId: string | null; workPackageId: string | null; project: { key: string; color: string }; assignees: { id: string; name: string; avatarColor: string }[]; labels: { id: string; name: string; color: string }[] }): BoardTask {
     return {
-      id: t.id, title: t.title, description: t.description, status: t.status,
+      id: t.id, title: t.title, description: t.description, status: t.status, order: t.order,
       priority: t.priority, dueDate: t.dueDate ? t.dueDate.toISOString() : null,
       projectId: t.projectId, projectKey: t.project.key, projectColor: t.project.color,
       sprintId: t.sprintId, workPackageId: t.workPackageId,
@@ -68,13 +93,15 @@ export function TaskDialog({
       if (editing && task) {
         const res = await updateTask({
           taskId: task.id, title, description: description || null, priority, status,
-          sprintId: sprintId || null, dueDate: dueDate || null, assigneeIds, labelIds,
+          sprintId: sprintId || null, workPackageId: workPackageId || null,
+          dueDate: dueDate || null, assigneeIds, labelIds,
         });
         onSaved("updated", toBoardTask(res));
       } else {
         const res = await createTask({
           projectId, title, description, status, priority,
-          sprintId: sprintId || null, dueDate: dueDate || null, assigneeIds, labelIds,
+          sprintId: sprintId || null, workPackageId: workPackageId || null,
+          dueDate: dueDate || null, assigneeIds, labelIds,
         });
         onSaved("created", toBoardTask(res));
       }
@@ -128,7 +155,7 @@ export function TaskDialog({
             <div>
               <Label>Status</Label>
               <Select value={status} onChange={(e) => setStatus(e.target.value)} className="w-full">
-                {COLUMNS.map((c) => (
+                {statusOptions.map((c) => (
                   <option key={c.id} value={c.id}>{c.title}</option>
                 ))}
               </Select>
@@ -157,6 +184,18 @@ export function TaskDialog({
                 ))}
               </Select>
             </div>
+          </div>
+
+          <div>
+            <Label>Pacote WBS</Label>
+            <Select value={workPackageId} onChange={(e) => setWorkPackageId(e.target.value)} className="w-full">
+              <option value="">Sem pacote WBS</option>
+              {projectWorkPackages.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.code ? `${w.code} — ` : ""}{w.name}
+                </option>
+              ))}
+            </Select>
           </div>
 
           <div>
@@ -210,6 +249,10 @@ export function TaskDialog({
               </div>
             )}
           </div>
+
+          {editing && task && (
+            <TaskChecklist taskId={task.id} initialItems={checklist} writable={writable} />
+          )}
 
           {editing && task && (
             <KnowledgeLinksPanel

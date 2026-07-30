@@ -4,13 +4,16 @@ import { prisma } from "@/lib/db";
 import { Card, Avatar, Badge, PageHeader } from "@/components/ui";
 import { NewUserButton, RoleControl, ROLES, PendingUsersPanel } from "@/components/team/team-client";
 import { canManageUserProfiles } from "@/lib/user-access";
+import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
 import { ChevronRight } from "lucide-react";
+import { TeamCapabilitiesPanel } from "@/components/team/team-capabilities-panel";
+import { getLabCapabilitiesArticleAction } from "@/plugins/team/capabilities-actions";
 
 export default async function TeamPage() {
   const session = await requireUser();
-  const isAdmin = canManageUserProfiles(session.role);
+  const isAdmin = canManageUserProfiles(session);
 
-  const [pendingUsers, users] = await Promise.all([
+  const [pendingUsers, users, capabilitiesArticle] = await Promise.all([
     isAdmin
       ? prisma.user.findMany({
           where: { accountStatus: "pending" },
@@ -20,11 +23,13 @@ export default async function TeamPage() {
     prisma.user.findMany({
       where: { accountStatus: "active" },
       include: {
+        profiles: { select: { profile: true } },
         _count: { select: { memberships: true, assignedTasks: true } },
         memberships: { include: { project: true } },
       },
       orderBy: { name: "asc" },
     }),
+    isAdmin ? getLabCapabilitiesArticleAction() : Promise.resolve({ articleId: null, updatedAt: null }),
   ]);
 
   return (
@@ -36,12 +41,18 @@ export default async function TeamPage() {
       />
 
       {isAdmin && (
+        <TeamCapabilitiesPanel
+          initialArticleId={capabilitiesArticle.articleId}
+          initialUpdatedAt={capabilitiesArticle.updatedAt}
+        />
+      )}
+
+      {isAdmin && (
         <PendingUsersPanel
           users={pendingUsers.map((u) => ({
             id: u.id,
             name: u.name,
             email: u.email,
-            title: u.title,
             role: u.role,
             createdAt: u.createdAt.toISOString(),
           }))}
@@ -50,13 +61,19 @@ export default async function TeamPage() {
 
       <Card className="divide-y divide-border">
         {users.length === 0 && <p className="p-4 text-sm text-muted">Nenhum membro ativo.</p>}
-        {users.map((u) => (
+        {users.map((u) => {
+          const profilesLabel = formatProfilesLabel(
+            u.profiles.length
+              ? normalizeProfiles(u.profiles.map((p) => p.profile))
+              : legacyRoleToProfiles(u.role),
+          );
+          return (
           <div key={u.id} className="flex flex-wrap items-center gap-4 p-4">
             <Link href={`/team/${u.id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-4 transition hover:opacity-90">
               <Avatar name={u.name} color={u.avatarColor} />
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{u.name}</p>
-                <p className="text-xs text-muted">{u.email}{u.title ? ` - ${u.title}` : ""}</p>
+                <p className="text-xs text-muted">{u.email} · {profilesLabel}</p>
               </div>
               <div className="flex flex-wrap gap-1">
                 {u.memberships.map((m) => <Badge key={m.id} color={m.project.color}>{m.project.key}</Badge>)}
@@ -74,7 +91,8 @@ export default async function TeamPage() {
               </Link>
             </div>
           </div>
-        ))}
+          );
+        })}
       </Card>
     </div>
   );

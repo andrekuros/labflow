@@ -10,7 +10,10 @@ import {
   assertCanEditArticle,
   canViewArticle,
   articleVisibilityWhere,
+  getAdminOnlyFolders,
+  filterRagHitsForUser,
 } from "@/lib/knowledge-access";
+import { articleIsAdminOnly } from "@/plugins/knowledge/folder-path";
 import { emit } from "@/lib/events";
 import { search as ragSearch } from "@/lib/ai/rag";
 import { ensurePluginRegistry, getPlugin, setPluginSettings, getPluginSettings } from "@/plugins/registry";
@@ -95,7 +98,10 @@ export async function searchKnowledge(query: string): Promise<KnowledgeSearchRes
   const byId = new Map<string, { score: number; snippet: string }>();
 
   if (semanticEnabled) {
-    const hits = await ragSearch(q, { limit: 10, sourceType: "article", scanLimit: ragScanLimit });
+    const hits = await filterRagHitsForUser(
+      await ragSearch(q, { limit: 10, sourceType: "article", scanLimit: ragScanLimit }),
+      session,
+    );
     const articleHits = hits.filter((h) => h.sourceType === "article");
     for (const h of articleHits) {
       const cur = byId.get(h.sourceId);
@@ -124,13 +130,20 @@ export async function searchKnowledge(query: string): Promise<KnowledgeSearchRes
   });
   const map = new Map(articles.map((a) => [a.id, a]));
 
-  const visible: { id: string; title: string; snippet: string; score: number }[] = [];
+  const visible: { id: string; title: string; snippet: string; score: number; adminOnly: boolean }[] = [];
+  const adminFolders = getAdminOnlyFolders();
   for (const id of ids) {
     const a = map.get(id);
     if (!a) continue;
     if (!(await canViewArticle(session, a))) continue;
     const meta = byId.get(id)!;
-    visible.push({ id: a.id, title: a.title, snippet: meta.snippet, score: meta.score });
+    visible.push({
+      id: a.id,
+      title: a.title,
+      snippet: meta.snippet,
+      score: meta.score,
+      adminOnly: articleIsAdminOnly(a, adminFolders),
+    });
   }
 
   return {
@@ -177,6 +190,7 @@ export async function saveNextcloudSettingsAction(input: {
   nextcloudAutoSyncIntervalMinutes?: number;
   nextcloudFolderProjectMapJson?: string;
   nextcloudExcludeFolders?: string;
+  nextcloudAdminOnlyFolders?: string;
 }) {
   await requireAdmin();
   await ensurePluginRegistry();
@@ -193,6 +207,10 @@ export async function saveNextcloudSettingsAction(input: {
       ? parseFolderProjectMapJson(input.nextcloudFolderProjectMapJson)
       : current?.settings.nextcloudFolderProjectMap ?? {},
     nextcloudExcludeFolders: (input.nextcloudExcludeFolders ?? "templates")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    nextcloudAdminOnlyFolders: (input.nextcloudAdminOnlyFolders ?? "admin")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean),
@@ -239,8 +257,11 @@ export async function createNextcloudTemplateAction(input: {
 }
 
 export async function getKnowledgeFolderTreeAction() {
-  await getSession();
+  const session = await getSession();
+  if (!session) throw new Error("Nao autenticado");
+  const visibility = await articleVisibilityWhere(session);
   const articles = await prisma.knowledgeArticle.findMany({
+    where: visibility,
     select: { externalFolder: true, externalSource: true },
   });
   return buildFolderTree(articles);

@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { viewableProjectIds, writableMap } from "@/lib/projects";
+import { workspaceProjectIds } from "@/lib/workspace";
+import { writableMap } from "@/lib/projects";
 import { Card, Badge, PageHeader, EmptyState } from "@/components/ui";
 import { formatDate, daysUntil } from "@/lib/utils";
 import { NewDeliverableButton, DeliverableStatusControl, DELIVERABLE_STATUS } from "@/components/deliverables/deliverable-forms";
@@ -8,7 +9,7 @@ import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
 
 export default async function DeliverablesPage() {
   const session = await requireUser();
-  const ids = await viewableProjectIds(session);
+  const ids = await workspaceProjectIds(session);
   if (ids.length === 0) return <EmptyState title="Nenhum projeto" description="Participe de um projeto para gerenciar entregaveis." />;
 
   const [projects, deliverables, workPackages, requirements, canWrite] = await Promise.all([
