@@ -20,10 +20,11 @@ Repositorio: https://github.com/andrekuros/labflow
 10. [Temas visuais](#temas-visuais)
 11. [Assistente de IA](#assistente-de-ia)
 12. [Plugins](#plugins)
-13. [Estrutura do projeto](#estrutura-do-projeto)
-14. [Producao e PostgreSQL](#producao-e-postgresql)
-15. [Desenvolvimento com IA (Cursor)](#desenvolvimento-com-ia-cursor)
-16. [Solucao de problemas](#solucao-de-problemas)
+13. [API REST](#api-rest)
+14. [Estrutura do projeto](#estrutura-do-projeto)
+15. [Producao e PostgreSQL](#producao-e-postgresql)
+16. [Desenvolvimento com IA (Cursor)](#desenvolvimento-com-ia-cursor)
+17. [Solucao de problemas](#solucao-de-problemas)
 
 ---
 
@@ -340,6 +341,26 @@ Plugins estendem a plataforma sem alterar o nucleo. Cada plugin declara um `Plug
 - **Slots de UI** — componentes renderizados em areas nomeadas (ex.: dashboard)
 
 Registre plugins em `src/plugins/index.ts`. Veja o exemplo em `src/plugins/example/`.
+
+---
+
+## API REST
+
+Base: `/api/v1/{pluginId}/...`
+
+**Autenticacao:** header `Authorization: Bearer lf_...` (gere a chave em Configuracoes > Integracoes), JWT Bearer, ou cookie de sessao do browser quando voce ja esta logado (ex.: link do catalogo em Configuracoes).
+
+**Catalogo automatico** (lista todas as rotas registradas):
+
+```bash
+curl -H "Authorization: Bearer lf_SUA_CHAVE" http://localhost:3000/api/v1
+```
+
+Documentacao in-app: artigo **LabFlow — API REST** na base de conhecimento (tambem linkado em Configuracoes > Integracoes).
+
+Respostas: `{ "ok": true, "data": ... }` ou `{ "ok": false, "error": "..." }`. Permissoes RBAC iguais as da UI.
+
+Handlers por plugin em `src/plugins/<id>/api.ts`, registrados em `src/plugins/index.ts`.
 
 ---
 

@@ -2,9 +2,10 @@ import "server-only";
 import { createHash, randomBytes } from "crypto";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/db";
-import type { SessionUser } from "@/lib/auth";
+import { getSession, type SessionUser } from "@/lib/auth";
 import { getUserProfileKeys } from "@/lib/user-profiles";
 import { legacyRoleToProfiles, primaryProfile } from "@/lib/profile-meta";
+import { canLogin } from "@/lib/user-access";
 
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? "insecure-dev-secret-change-me",
@@ -19,13 +20,16 @@ export function generateApiKey() {
   return { raw, hash: hashApiKey(raw) };
 }
 
+/**
+ * Authenticate an /api/v1 request.
+ * Order: Bearer lf_... API key → Bearer JWT → browser session cookie (for in-app catalog links).
+ */
 export async function authenticateApiRequest(
   request: Request,
 ): Promise<SessionUser | null> {
   const auth = request.headers.get("authorization");
-  if (!auth) return null;
 
-  if (auth.startsWith("Bearer ")) {
+  if (auth?.startsWith("Bearer ")) {
     const token = auth.slice(7);
     if (token.startsWith("lf_")) {
       const hash = hashApiKey(token);
@@ -65,5 +69,15 @@ export async function authenticateApiRequest(
     }
   }
 
-  return null;
+  // Browser session (Settings "Catalogo JSON" link, same-origin fetches while logged in)
+  const session = await getSession();
+  if (!session) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.id },
+    select: { accountStatus: true },
+  });
+  if (!user || !canLogin(user.accountStatus)) return null;
+
+  return session;
 }

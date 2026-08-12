@@ -105,9 +105,12 @@ Bootstrap RAG: `src/server/bootstrap.ts` (eventos → ingest/index).
 
 ### API REST de plugins
 
-`src/app/api/v1/[...path]/route.ts` → `/api/v1/{pluginId}/{subPath}`
-
-Autenticação via `src/plugins/api-auth.ts`. Handlers registrados com `registerApiHandlers(id, { "GET list": handler, "POST create": handler })`.
+- Catch-all: `src/app/api/v1/[...path]/route.ts` → `/api/v1/{pluginId}/{subPath}`
+- Catalogo: `GET /api/v1` (`src/app/api/v1/route.ts`) lista rotas via `listRegisteredApiRoutes()`
+- Auth: Bearer `lf_...` (API key) ou JWT em `src/plugins/api-auth.ts` — **sem** cookie de sessao
+- Contexto: `runWithApiUser` (`src/lib/request-user.ts`) faz actions/`getSession` enxergarem o usuario da chave
+- Handlers: `registerApiHandlers(id, { "GET items": handler, "POST items": handler })` em `src/plugins/<id>/api.ts`
+- Paths normalizados (barra inicial opcional). Preferir CRUD do recurso primario + `hasPermission` / `runApiAction`
 
 ## Convenções de código
 

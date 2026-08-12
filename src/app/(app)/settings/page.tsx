@@ -20,7 +20,7 @@ export default async function SettingsPage() {
 
   const isAdmin = isAdminUser(session);
 
-  const [user, navItems, plugins, apiKeys, aiSettings, nextcloudSettings, labBranding] = await Promise.all([
+  const [user, navItems, plugins, apiKeys, aiSettings, nextcloudSettings, labBranding, apiDocsArticle] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.id },
       select: { name: true, email: true, preferences: true },
@@ -55,6 +55,10 @@ export default async function SettingsPage() {
       hasStoredPassword: false,
     }),
     isAdmin ? getLabBranding() : Promise.resolve({ name: DEFAULT_LAB_NAME, logoUrl: null }),
+    prisma.knowledgeArticle.findFirst({
+      where: { title: "LabFlow — API REST" },
+      select: { id: true },
+    }),
   ]);
 
   return (
@@ -68,6 +72,7 @@ export default async function SettingsPage() {
       aiSettings={aiSettings}
       nextcloudSettings={nextcloudSettings}
       labBranding={labBranding}
+      apiDocsHref={apiDocsArticle ? `/knowledge/${apiDocsArticle.id}` : "/knowledge"}
     />
   );
 }

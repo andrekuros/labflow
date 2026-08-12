@@ -4,26 +4,37 @@ import { prisma } from "@/lib/db";
 import { getSession, buildSessionUser, createSession, type SessionUser } from "@/lib/auth";
 import { canLogin, isAdminUser } from "@/lib/user-access";
 import { resolveProfiles } from "@/lib/user-profiles";
+import { isApiRequestContext } from "@/lib/request-user";
 
 export { isAdminUser };
+
+function denyAuth(path: string): never {
+  if (isApiRequestContext()) throw new Error("Nao autenticado");
+  redirect(path);
+}
+
+function denyPermission(): never {
+  if (isApiRequestContext()) throw new Error("Sem permissao");
+  redirect("/");
+}
 
 /** Ensures there is an authenticated active user; redirects to /login otherwise. */
 export async function requireUser(): Promise<SessionUser> {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) denyAuth("/login");
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },
     select: { accountStatus: true },
   });
-  if (!user || !canLogin(user.accountStatus)) redirect("/login?status=inactive");
+  if (!user || !canLogin(user.accountStatus)) denyAuth("/login?status=inactive");
 
   return session;
 }
 
 export async function requireAdmin(): Promise<SessionUser> {
   const session = await requireUser();
-  if (!isAdminUser(session)) redirect("/");
+  if (!isAdminUser(session)) denyPermission();
   return session;
 }
 
@@ -111,14 +122,14 @@ export async function hasPermission(
   return false;
 }
 
-/** Redirects to / if the user lacks the given permission. */
+/** Redirects to / if the user lacks the given permission (throws in API context). */
 export async function requirePermission(
   permissionKey: string,
   projectId?: string,
 ): Promise<SessionUser> {
   const session = await requireUser();
   const ok = await hasPermission(session, permissionKey, projectId);
-  if (!ok) redirect("/");
+  if (!ok) denyPermission();
   return session;
 }
 

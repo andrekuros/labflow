@@ -180,32 +180,47 @@ export default async function MyPluginPage({
 
 ## Template — api.ts
 
+Implemente CRUD do recurso primario quando o plugin precisar de integracao externa. Auth da API e **Bearer only** (`lf_...` ou JWT). `runWithApiUser` faz `getSession()` ver o usuario da chave.
+
+Catalogo runtime: `GET /api/v1` → `listRegisteredApiRoutes()`.
+
 ```typescript
-import { jsonOk, jsonError, readJsonBody } from "@/plugins/api-utils";
+import { jsonOk, jsonError, runApiAction } from "@/plugins/api-utils";
 import type { PluginApiHandlers } from "@/plugins/types";
 import { hasPermission } from "@/lib/rbac";
+import { createItem } from "@/plugins/my-module/actions";
 import { prisma } from "@/lib/db";
 
 export const handlers: PluginApiHandlers = {
-  "GET list": async (ctx) => {
-    if (!hasPermission(ctx.user, "mymodule:view")) {
+  "GET items": async (ctx) => {
+    if (!(await hasPermission(ctx.user, "mymodule:view"))) {
       return jsonError("Sem permissao", 403);
     }
     const rows = await prisma.myModel.findMany({ take: 50 });
-    return jsonOk({ items: rows });
+    return jsonOk(rows);
   },
 
-  "POST create": async (ctx) => {
-    if (!hasPermission(ctx.user, "mymodule:create")) {
+  "POST items": async (ctx, body) => {
+    if (!(await hasPermission(ctx.user, "mymodule:create"))) {
       return jsonError("Sem permissao", 403);
     }
-    const body = await readJsonBody<{ title?: string }>(ctx.request);
-    if (!body?.title) return jsonError("title obrigatorio");
-    const row = await prisma.myModel.create({ data: { title: body.title } });
-    return jsonOk({ id: row.id }, 201);
+    const input = body as { title?: string };
+    if (!input?.title) return jsonError("title obrigatorio");
+    return runApiAction(() => createItem({ title: input.title! }));
+  },
+
+  "GET items/:id": async (ctx) => {
+    if (!(await hasPermission(ctx.user, "mymodule:view"))) {
+      return jsonError("Sem permissao", 403);
+    }
+    const row = await prisma.myModel.findUnique({ where: { id: ctx.params.id } });
+    if (!row) return jsonError("Nao encontrado", 404);
+    return jsonOk(row);
   },
 };
 ```
+
+Chaves sem depender de barra inicial (`"GET items"`). Paths com `:param` sao suportados.
 
 ## Template — client component
 

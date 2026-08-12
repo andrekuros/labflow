@@ -166,36 +166,57 @@ Nao reinventar — **importar ou espelhar** o que ja existe:
 | Links wiki ↔ entidade | `plugins/knowledge/link-actions.ts`, model `KnowledgeLink` |
 | IA + drafts | `plugins/projects/` (artefatos), `plugins/publications/` |
 | Eventos + RAG | `server/bootstrap.ts` subscribers |
-| API REST | `plugins/team/api.ts`, `plugins/knowledge/api.ts` |
+| API REST | `plugins/board/api.ts`, `plugins/knowledge/api.ts`, `plugins/projects/api.ts` |
 | Todos os extension points | `plugins/example/index.ts` |
 
 Logica de dominio compartilhada: `src/lib/<dominio>/` (ex.: `publications/access.ts`, `knowledge-access.ts`).
 
-## API REST (opcional)
+## API REST
+
+Implemente ou atualize `api.ts` quando o modulo precisar de integracao externa / automacao. Padrao: **CRUD do recurso primario** (`list` / `get` / `create` / `update` / `delete` onde houver action) + ops especiais. Nao espelhe fluxos niche so de UI (WBS move, drafts, PDF).
+
+Checklist REST:
+
+```
+- [ ] Handlers em api.ts com chaves "METHOD path" (sem depender de barra inicial)
+- [ ] hasPermission / runApiAction em cada handler
+- [ ] Preferir chamar actions existentes (ALS runWithApiUser ja injeta o Bearer user em getSession)
+- [ ] Registrar em API_REGISTRATIONS (index.ts)
+- [ ] Rotas aparecem em GET /api/v1 (listRegisteredApiRoutes)
+```
 
 ```typescript
 // src/plugins/<id>/api.ts
-import { jsonOk, jsonError } from "@/plugins/api-utils";
+import { jsonOk, jsonError, runApiAction } from "@/plugins/api-utils";
 import type { PluginApiHandlers } from "@/plugins/types";
 import { hasPermission } from "@/lib/rbac";
+import { createThing } from "@/plugins/my-module/actions";
 
 export const handlers: PluginApiHandlers = {
   "GET items": async (ctx) => {
-    if (!hasPermission(ctx.user, "mymodule:view")) {
+    if (!(await hasPermission(ctx.user, "mymodule:view"))) {
       return jsonError("Sem permissao", 403);
     }
     return jsonOk({ items: [] });
   },
-  "POST items/:id": async (ctx, body) => {
+  "POST items": async (ctx, body) => {
+    if (!(await hasPermission(ctx.user, "mymodule:create"))) {
+      return jsonError("Sem permissao", 403);
+    }
+    return runApiAction(() => createThing(body as { title: string }));
+  },
+  "PATCH items/:id": async (ctx, body) => {
     // ctx.params.id, ctx.user, ctx.request
     return jsonOk({ updated: true });
   },
 };
 ```
 
-Chave do handler: `"METHOD path"` ou `"METHOD path/:param"`. URL: `/api/v1/<pluginId>/items`.
-
-Auth: cookie de sessao ou `Authorization: Bearer lf_...` (`plugins/api-auth.ts`).
+- Chave: `"METHOD path"` ou `"METHOD path/:param"` (barra inicial e opcional; o registry normaliza).
+- URL: `/api/v1/<pluginId>/items`
+- Auth: **`Authorization: Bearer lf_...`** ou JWT (`plugins/api-auth.ts`). Cookie de sessao do browser tambem autentica (ex.: abrir `/api/v1` logado).
+- Catalogo: `GET /api/v1` (autenticado) lista todas as rotas registradas.
+- Docs usuario: artigo Knowledge "LabFlow — API REST" + Settings > Integracoes.
 
 ## Extensao sem rota nova
 

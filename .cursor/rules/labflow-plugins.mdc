@@ -53,6 +53,8 @@ export async function createThing(input: ...) {
 
 ## API handlers
 
-Chave: `"METHOD path"` ou `"METHOD path/:param"`. Exemplo: `"GET reports"`, `"POST items/:id"`.
+Chave: `"METHOD path"` ou `"METHOD path/:param"` (barra inicial opcional; registry normaliza). Exemplo: `"GET reports"`, `"POST items"`, `"PATCH items/:id"`.
 
-Referência: `src/plugins/reports/api.ts`, `src/plugins/knowledge/api.ts`.
+Auth da API: Bearer `lf_...` / JWT apenas. Preferir chamar server actions via `runApiAction` (usuario injetado por `runWithApiUser`).
+
+Catalogo: `GET /api/v1`. Referência: `src/plugins/board/api.ts`, `src/plugins/knowledge/api.ts`.

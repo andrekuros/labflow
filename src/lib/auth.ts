@@ -4,6 +4,7 @@ import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getUserProfileKeys, primaryProfile } from "@/lib/user-profiles";
+import { getRequestUserOverride } from "@/lib/request-user";
 
 const COOKIE_NAME = "labflow_session";
 const secret = new TextEncoder().encode(
@@ -66,6 +67,9 @@ export async function destroySession() {
 }
 
 export async function getSession(): Promise<SessionUser | null> {
+  const apiUser = getRequestUserOverride();
+  if (apiUser) return apiUser;
+
   const store = await cookies();
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;

@@ -313,7 +313,8 @@ export async function deleteProject(projectId: string, confirmKey: string) {
   await prisma.project.delete({ where: { id: projectId } });
   revalidatePath("/projects");
   revalidatePath("/board");
-  redirect("/projects");
+  const { isApiRequestContext } = await import("@/lib/request-user");
+  if (!isApiRequestContext()) redirect("/projects");
 }
 
 export async function createLabel(input: { projectId: string; name: string; color: string }) {

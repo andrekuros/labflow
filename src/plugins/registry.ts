@@ -278,12 +278,51 @@ export function getPluginApiHandler(
 
 const apiHandlerMap = new Map<string, import("@/plugins/types").PluginApiHandler>();
 
+/** Normalize handler path keys: strip leading slashes; "/" becomes "". */
+export function normalizeApiPath(path: string): string {
+  const trimmed = path.trim();
+  if (trimmed === "/" || trimmed === "") return "";
+  return trimmed.replace(/^\/+/, "");
+}
+
+function parseApiHandlerKey(key: string): { pluginId: string; method: string; path: string } {
+  const first = key.indexOf(":");
+  const second = key.indexOf(":", first + 1);
+  if (first < 0 || second < 0) {
+    return { pluginId: key, method: "", path: "" };
+  }
+  return {
+    pluginId: key.slice(0, first),
+    method: key.slice(first + 1, second),
+    path: key.slice(second + 1),
+  };
+}
+
 export function registerApiHandlers(pluginId: string, handlers: import("@/plugins/types").PluginApiHandlers) {
   for (const [route, handler] of Object.entries(handlers)) {
     const [method, ...pathParts] = route.split(" ");
-    const path = pathParts.join(" ").trim();
+    const path = normalizeApiPath(pathParts.join(" ").trim());
     apiHandlerMap.set(`${pluginId}:${method}:${path}`, handler);
   }
+}
+
+export type RegisteredApiRoute = {
+  pluginId: string;
+  method: string;
+  path: string;
+  url: string;
+};
+
+/** Inventory of all registered plugin REST handlers (for GET /api/v1 discovery). */
+export function listRegisteredApiRoutes(): RegisteredApiRoute[] {
+  const routes: RegisteredApiRoute[] = [];
+  for (const key of apiHandlerMap.keys()) {
+    const { pluginId, method, path } = parseApiHandlerKey(key);
+    const url = path ? `/api/v1/${pluginId}/${path}` : `/api/v1/${pluginId}`;
+    routes.push({ pluginId, method, path, url });
+  }
+  routes.sort((a, b) => a.url.localeCompare(b.url) || a.method.localeCompare(b.method));
+  return routes;
 }
 
 export function matchApiHandler(
@@ -291,12 +330,14 @@ export function matchApiHandler(
   method: string,
   subPath: string,
 ): { handler: import("@/plugins/types").PluginApiHandler; params: Record<string, string> } | null {
-  const exact = apiHandlerMap.get(`${pluginId}:${method}:${subPath}`);
+  const normalized = normalizeApiPath(subPath);
+  const exact = apiHandlerMap.get(`${pluginId}:${method}:${normalized}`);
   if (exact) return { handler: exact, params: {} };
 
   for (const [key, handler] of apiHandlerMap.entries()) {
-    const [pid, m, pattern] = key.split(":");
-    if (pid !== pluginId || m !== method) continue;
+    const parsed = parseApiHandlerKey(key);
+    if (parsed.pluginId !== pluginId || parsed.method !== method) continue;
+    const pattern = parsed.path;
 
     const paramNames: string[] = [];
     const regex = new RegExp(
@@ -307,7 +348,7 @@ export function matchApiHandler(
         }) +
         "$",
     );
-    const result = subPath.match(regex);
+    const result = normalized.match(regex);
     if (!result) continue;
 
     const params: Record<string, string> = {};

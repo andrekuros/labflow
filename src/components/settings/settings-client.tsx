@@ -102,6 +102,7 @@ export function SettingsClient({
   aiSettings,
   nextcloudSettings,
   labBranding,
+  apiDocsHref = "/knowledge",
 }: {
   isAdmin: boolean;
   account: { name: string; email: string };
@@ -112,6 +113,7 @@ export function SettingsClient({
   aiSettings: AiSettingsRow;
   nextcloudSettings: NextcloudSettingsRow;
   labBranding: LabBranding;
+  apiDocsHref?: string;
 }) {
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
   const [tab, setTab] = useState<TabId>("preferencias");
@@ -246,8 +248,16 @@ export function SettingsClient({
         <div className="space-y-6">
           <Card className="p-5">
             <h2 className="mb-2 text-sm font-semibold">Chaves de API</h2>
-            <p className="mb-4 text-sm text-muted">
+            <p className="mb-2 text-sm text-muted">
               Use no header <span className="font-mono text-xs">Authorization: Bearer lf_...</span> para integrar com a API REST.
+            </p>
+            <p className="mb-4 flex flex-wrap gap-3 text-sm">
+              <a href={apiDocsHref} className="text-accent underline-offset-2 hover:underline">
+                Documentacao da API
+              </a>
+              <a href="/api/v1" target="_blank" rel="noreferrer" className="text-accent underline-offset-2 hover:underline">
+                Catalogo JSON (/api/v1)
+              </a>
             </p>
 
             {newKey && (

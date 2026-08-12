@@ -227,8 +227,95 @@ Alunos de mestrado/doutorado podem preencher seu perfil academico com metodologi
 ## Backup
 - Em **Configuracoes > Integracoes**, baixe um backup completo do banco de dados
 
+## API REST
+- Gere chaves em **Configuracoes > Integracoes**
+- Consulte o catalogo em \`GET /api/v1\` e o artigo **LabFlow — API REST**
+
 ## Feedback
 - Configure o projeto que recebera sugestoes da IA em **Configuracoes > Plugins > Feedback**
+`,
+  },
+  {
+    title: "LabFlow — API REST",
+    tags: "docs,api,integracao,rest",
+    content: `# API REST do LabFlow
+
+Base URL: \`/api/v1\`
+
+## Autenticacao
+
+Todas as rotas exigem o header:
+
+\`\`\`
+Authorization: Bearer lf_...
+\`\`\`
+
+Gere a chave em **Configuracoes > Integracoes** (apenas admin). JWT Bearer tambem e aceito.
+Se voce estiver logado no LabFlow, abrir \`/api/v1\` no navegador tambem funciona (cookie de sessao).
+Integracoes externas devem usar a chave \`lf_...\`.
+
+## Catalogo automatico
+
+\`\`\`bash
+curl -H "Authorization: Bearer lf_SUA_CHAVE" http://localhost:3000/api/v1
+\`\`\`
+
+Resposta: lista de plugins habilitados e rotas \`method\` + \`url\` registradas em runtime.
+
+## Formato de resposta
+
+- Sucesso: \`{ "ok": true, "data": ... }\`
+- Erro: \`{ "ok": false, "error": "mensagem" }\` (401/403/404/400)
+
+Permissoes RBAC sao as mesmas da UI (\`modulo:acao\`).
+
+## Exemplos
+
+### Listar tarefas
+\`\`\`bash
+curl -H "Authorization: Bearer lf_SUA_CHAVE" \\
+  "http://localhost:3000/api/v1/board/tasks?projectId=PROJECT_ID"
+\`\`\`
+
+### Criar tarefa
+\`\`\`bash
+curl -X POST -H "Authorization: Bearer lf_SUA_CHAVE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"projectId":"PROJECT_ID","title":"Nova tarefa"}' \\
+  http://localhost:3000/api/v1/board/tasks
+\`\`\`
+
+### Assistente
+\`\`\`bash
+curl -X POST -H "Authorization: Bearer lf_SUA_CHAVE" \\
+  -H "Content-Type: application/json" \\
+  -d '{"question":"Quais projetos estao ativos?"}' \\
+  http://localhost:3000/api/v1/assistant/ask
+\`\`\`
+
+## Recursos principais
+
+| Plugin | Prefixo | Recursos |
+|--------|---------|----------|
+| projects | /api/v1/projects | projects (CRUD) |
+| board | /api/v1/board | tasks (CRUD) |
+| knowledge | /api/v1/knowledge | articles (CRUD), search, sync-nextcloud, health |
+| team | /api/v1/team | users (CRUD) |
+| sprints | /api/v1/sprints | sprints |
+| requirements | /api/v1/requirements | requirements |
+| deliverables | /api/v1/deliverables | deliverables |
+| roadmap | /api/v1/roadmap | milestones |
+| forum | /api/v1/forum | channels, threads, posts |
+| system-model | /api/v1/system-model | elements, interfaces, diagrams |
+| verification | /api/v1/verification | cases |
+| assistant | /api/v1/assistant | ask |
+| feedback | /api/v1/feedback | feedbacks |
+| activity-log | /api/v1/activity-log | log + filters |
+| reports | /api/v1/reports | activity, team-overview |
+| planning | /api/v1/planning | agregacao ?projectId= |
+| thesis / papers | /api/v1/thesis, /papers | list/create/get |
+
+Para a lista completa e sempre atualizada, use \`GET /api/v1\`.
 `,
   },
 ];
