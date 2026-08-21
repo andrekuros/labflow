@@ -17,7 +17,13 @@ export async function ensureProjectBundleFormatArticle() {
     if (existing.content !== PROJECT_BUNDLE_FORMAT_DOC) {
       await prisma.knowledgeArticle.update({
         where: { id: existing.id },
-        data: { content: PROJECT_BUNDLE_FORMAT_DOC, tags: DOC_TAGS },
+        data: {
+          content: PROJECT_BUNDLE_FORMAT_DOC,
+          tags: DOC_TAGS,
+          externalSource: "system",
+          kind: "page",
+          extractedText: PROJECT_BUNDLE_FORMAT_DOC,
+        },
       });
       await emit({
         type: "article.updated",
@@ -38,6 +44,9 @@ export async function ensureProjectBundleFormatArticle() {
       content: PROJECT_BUNDLE_FORMAT_DOC,
       tags: DOC_TAGS,
       projectId: null,
+      kind: "page",
+      externalSource: "system",
+      extractedText: PROJECT_BUNDLE_FORMAT_DOC,
     },
   });
   await emit({

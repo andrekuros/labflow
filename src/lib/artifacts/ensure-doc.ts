@@ -14,7 +14,7 @@ export async function ensureArtifactsFormatArticle() {
     if (existing.content !== ARTIFACTS_FORMAT_DOC) {
       await prisma.knowledgeArticle.update({
         where: { id: existing.id },
-        data: { content: ARTIFACTS_FORMAT_DOC, tags: DOC_TAGS },
+        data: { content: ARTIFACTS_FORMAT_DOC, tags: DOC_TAGS, externalSource: "system", kind: "page", extractedText: ARTIFACTS_FORMAT_DOC },
       });
       await emit({ type: "article.updated", targetId: existing.id, payload: { id: existing.id, title: DOC_TITLE, content: ARTIFACTS_FORMAT_DOC } });
     }
@@ -27,6 +27,9 @@ export async function ensureArtifactsFormatArticle() {
       content: ARTIFACTS_FORMAT_DOC,
       tags: DOC_TAGS,
       projectId: null,
+      kind: "page",
+      externalSource: "system",
+      extractedText: ARTIFACTS_FORMAT_DOC,
     },
   });
   await emit({ type: "article.created", targetId: article.id, payload: { id: article.id, title: DOC_TITLE, content: ARTIFACTS_FORMAT_DOC } });

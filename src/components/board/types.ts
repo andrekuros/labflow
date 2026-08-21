@@ -20,6 +20,7 @@ export type BoardTask = {
   checklist?: TaskChecklistItem[];
   assignees: Person[];
   labels: { id: string; name: string; color: string }[];
+  knowledgeLinkCount?: number;
 };
 
 import { FALLBACK_COLUMN_IDS, columnDefsFromIds } from "@/lib/board-columns";

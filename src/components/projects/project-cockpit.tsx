@@ -19,6 +19,8 @@ type CockpitProps = {
   projectProgress?: ProjectProgress;
   deliverables: { id: string; name: string; status: string; dueDate: string | null }[];
   articles: { id: string; title: string; externalSource: string | null; updatedAt: string }[];
+  fileCount?: number;
+  libraryFolder?: string;
   threads: { id: string; title: string; status: string; updatedAt: string }[];
   linkCount: number;
   seMaturity?: { approved: number; total: number };
@@ -40,6 +42,8 @@ export function ProjectCockpit({
   projectProgress,
   deliverables,
   articles,
+  fileCount = 0,
+  libraryFolder,
   threads,
   linkCount,
   seMaturity,
@@ -142,10 +146,10 @@ export function ProjectCockpit({
       <Card className="p-4">
         <div className="mb-2 flex items-center gap-2 text-muted">
           <BookOpen size={15} />
-          <span className="text-xs font-semibold uppercase tracking-wide">Conhecimento</span>
+          <span className="text-xs font-semibold uppercase tracking-wide">Biblioteca</span>
         </div>
         {articles.length === 0 ? (
-          <p className="text-sm text-muted">Nenhum artigo do projeto.</p>
+          <p className="text-sm text-muted">Nenhum arquivo do projeto.</p>
         ) : (
           <ul className="space-y-1.5">
             {articles.slice(0, 4).map((a) => (
@@ -160,9 +164,18 @@ export function ProjectCockpit({
             ))}
           </ul>
         )}
-        <Link href="/knowledge" className="mt-2 inline-block text-xs text-brand hover:underline">
-          Base de conhecimento
+        <p className="mt-2 text-xs text-muted">{fileCount} arquivo(s)</p>
+        <Link href={`/projects/${project.id}?tab=files`} className="mt-1 inline-block text-xs text-brand hover:underline">
+          Ver todos os arquivos
         </Link>
+        {libraryFolder && (
+          <Link
+            href={`/knowledge?folder=${encodeURIComponent(libraryFolder)}`}
+            className="mt-1 ml-3 inline-block text-xs text-brand hover:underline"
+          >
+            Abrir na biblioteca
+          </Link>
+        )}
       </Card>
 
       <Card className="p-4">

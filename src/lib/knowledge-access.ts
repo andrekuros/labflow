@@ -16,6 +16,7 @@ export type ArticleAccess = {
   externalSource: string | null;
   externalPath?: string | null;
   externalFolder?: string | null;
+  kind?: string | null;
 };
 
 import { isAdminUser } from "@/lib/user-access";
@@ -58,7 +59,7 @@ export async function canViewArticle(user: SessionUser, article: ArticleAccess):
 }
 
 export async function canEditArticle(user: SessionUser, article: ArticleAccess): Promise<boolean> {
-  if (article.externalSource === "nextcloud") return false;
+  if (article.kind === "file") return false;
   if (!(await canViewArticle(user, article))) return false;
   if (await hasPermission(user, "knowledge:edit")) return true;
   return article.authorId === user.id;
@@ -99,19 +100,30 @@ export async function articleVisibilityWhere(user: SessionUser) {
   return { AND: [base, adminExclude] };
 }
 
-/** Remove RAG hits from admin-only articles for non-admin users. */
+/** Remove RAG hits from admin-only or out-of-scope articles. */
 export async function filterRagHitsForUser(hits: SearchHit[], user: SessionUser | null): Promise<SearchHit[]> {
-  if (user && isKnowledgeAdmin(user)) return hits;
-  const adminFolders = getAdminOnlyFolders();
-  if (adminFolders.length === 0) return hits;
-
   const articleIds = [...new Set(hits.filter((h) => h.sourceType === "article").map((h) => h.sourceId))];
   if (articleIds.length === 0) return hits;
 
   const articles = await prisma.knowledgeArticle.findMany({
     where: { id: { in: articleIds } },
-    select: { id: true, externalPath: true, externalFolder: true },
+    select: { id: true, externalPath: true, externalFolder: true, projectId: true },
   });
-  const blocked = new Set(articles.filter((a) => articleIsAdminOnly(a, adminFolders)).map((a) => a.id));
-  return hits.filter((h) => h.sourceType !== "article" || !blocked.has(h.sourceId));
+  const byId = new Map(articles.map((a) => [a.id, a]));
+  const adminFolders = getAdminOnlyFolders();
+  const viewable = user ? await viewableProjectIds(user) : [];
+  const isAdmin = user ? isKnowledgeAdmin(user) : false;
+
+  return hits.filter((h) => {
+    if (h.sourceType !== "article") {
+      if (!user) return true;
+      if (!h.projectId) return true;
+      return isAdmin || viewable.includes(h.projectId);
+    }
+    const article = byId.get(h.sourceId);
+    if (!article) return false;
+    if (!isAdmin && articleIsAdminOnly(article, adminFolders)) return false;
+    if (article.projectId && !isAdmin && !viewable.includes(article.projectId)) return false;
+    return true;
+  });
 }

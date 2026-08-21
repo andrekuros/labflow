@@ -4,6 +4,8 @@ import { getNextcloudSettings } from "@/plugins/knowledge/nextcloud-config";
 import { propfind } from "@/plugins/knowledge/nextcloud-client";
 import { parseFrontmatter } from "@/plugins/knowledge/frontmatter";
 import { parentFolderFromPath } from "@/plugins/knowledge/folder-map";
+import { looksLikeProjectVaultFolder } from "@/lib/knowledge/vault-layout";
+import { LIBRARY_FILE_RE } from "@/lib/knowledge/files";
 
 export type HealthIssue = {
   type: "missing_title" | "empty_folder" | "stale" | "no_project" | "draft";
@@ -22,7 +24,7 @@ export type HealthReport = {
 const STALE_DAYS = 90;
 
 function looksLikeFilenameTitle(title: string, path: string): boolean {
-  const base = path.split("/").pop()?.replace(/\.(md|txt)$/i, "") ?? "";
+  const base = path.split("/").pop()?.replace(LIBRARY_FILE_RE, "") ?? "";
   const normalized = title.toLowerCase().replace(/[-_]/g, " ");
   const baseNorm = base.toLowerCase().replace(/[-_]/g, " ");
   return normalized === baseNorm || title === base;
@@ -43,6 +45,7 @@ export async function computeKnowledgeHealth(): Promise<HealthReport> {
       projectId: true,
       updatedAt: true,
       content: true,
+      kind: true,
     },
   });
 
@@ -53,8 +56,9 @@ export async function computeKnowledgeHealth(): Promise<HealthReport> {
     const { meta } = parseFrontmatter(a.content);
     const hasHeading = /^#\s+.+/m.test(a.content);
     const title = meta.title ?? a.title;
+    const isFile = a.kind === "file" || /\.(pdf|docx)$/i.test(a.externalPath ?? "");
 
-    if (!hasHeading && !meta.title && looksLikeFilenameTitle(a.title, path)) {
+    if (!isFile && !hasHeading && !meta.title && looksLikeFilenameTitle(a.title, path)) {
       issues.push({
         type: "missing_title",
         severity: "warn",
@@ -77,7 +81,7 @@ export async function computeKnowledgeHealth(): Promise<HealthReport> {
     if (!a.projectId) {
       const folder = a.externalFolder ?? parentFolderFromPath(path);
       const mapped = folder && cfg.folderProjectMap[folder];
-      if (folder?.startsWith("projetos/") || mapped) {
+      if (looksLikeProjectVaultFolder(folder) || mapped) {
         issues.push({
           type: "no_project",
           severity: "warn",

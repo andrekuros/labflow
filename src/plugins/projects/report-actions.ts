@@ -14,6 +14,10 @@ import {
 import { generateProjectDocumentPdf } from "@/lib/projects/project-document-pdf";
 import type { ProjectReportConfig, ProjectReportData } from "@/lib/projects/project-document-types";
 import { normalizeReportConfig } from "@/lib/projects/project-document-types";
+import { serializeFrontmatter } from "@/plugins/knowledge/frontmatter";
+import { parentFolderFromPath } from "@/plugins/knowledge/folder-map";
+import { getVaultConnection, writeVaultMarkdown, generatedDocPath, ensureProjectVaultFromId } from "@/lib/knowledge/vault";
+import { articleIngestText } from "@/lib/knowledge/files";
 
 async function requireView(projectId: string) {
   const session = await getSession();
@@ -64,15 +68,62 @@ export async function publishProjectDocumentToKnowledgeAction(
   const normalized = normalizeReportConfig(config);
   const content = markdown?.trim() || generateProjectDocumentMarkdown(data, normalized);
   const title = knowledgeDocumentTitle(data.project.key);
-  const tags = `project-report,${data.project.key.toLowerCase()},documentacao`;
+  const tags = `project-report,${data.project.key.toLowerCase()},documentacao,generated`;
+  const markdownFile = serializeFrontmatter(
+    {
+      title,
+      tags: tags.split(","),
+      project: data.project.key,
+      projectId,
+      status: "active",
+    },
+    content,
+  );
+
+  const conn = await getVaultConnection();
+  let vaultPath: string | null = null;
+  let etag: string | null = null;
+  if (conn) {
+    await ensureProjectVaultFromId(projectId);
+    vaultPath = generatedDocPath(data.project.kind, data.project.key, title);
+    etag = await writeVaultMarkdown(conn, vaultPath, markdownFile);
+  }
 
   let articleId: string;
   let created = false;
 
-  if (data.knowledgeArticleId) {
+  const existing =
+    (data.knowledgeArticleId
+      ? await prisma.knowledgeArticle.findUnique({ where: { id: data.knowledgeArticleId } })
+      : null) ??
+    (vaultPath
+      ? await prisma.knowledgeArticle.findUnique({ where: { externalPath: vaultPath } })
+      : null);
+
+  const vaultFields = vaultPath
+    ? {
+        externalSource: "nextcloud" as const,
+        externalPath: vaultPath,
+        externalFolder: parentFolderFromPath(vaultPath) || null,
+        externalEtag: etag,
+        externalSyncedAt: new Date(),
+        fileName: vaultPath.split("/").pop() ?? null,
+        mimeType: "text/markdown",
+      }
+    : {};
+
+  if (existing) {
     const updated = await prisma.knowledgeArticle.update({
-      where: { id: data.knowledgeArticleId },
-      data: { title, content, tags },
+      where: { id: existing.id },
+      data: {
+        title,
+        content,
+        tags,
+        kind: "page",
+        extractedText: content,
+        projectId,
+        ...vaultFields,
+      },
     });
     articleId = updated.id;
     await emit({
@@ -80,7 +131,7 @@ export async function publishProjectDocumentToKnowledgeAction(
       actorId: session.id,
       projectId,
       targetId: articleId,
-      payload: { id: articleId, title, content },
+      payload: { id: articleId, title, content: articleIngestText(updated) },
     });
   } else {
     const createdRow = await prisma.knowledgeArticle.create({
@@ -90,6 +141,9 @@ export async function publishProjectDocumentToKnowledgeAction(
         tags,
         projectId,
         authorId: session.id,
+        kind: "page",
+        extractedText: content,
+        ...vaultFields,
       },
     });
     articleId = createdRow.id;
@@ -99,7 +153,7 @@ export async function publishProjectDocumentToKnowledgeAction(
       actorId: session.id,
       projectId,
       targetId: articleId,
-      payload: { id: articleId, title, content },
+      payload: { id: articleId, title, content: articleIngestText(createdRow) },
     });
   }
 

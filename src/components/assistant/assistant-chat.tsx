@@ -66,9 +66,10 @@ export function AssistantChat({
                   <p className="mb-1 text-[11px] font-medium text-muted">Fontes:</p>
                   <div className="flex flex-wrap gap-1.5">
                     {m.sources.map((s) => (
-                      <Link key={`${s.type}-${s.id}`} href={(SOURCE_HREF[s.type] ?? (() => "#"))(s.id)}
+                      <Link key={`${s.type}-${s.id}`} href={s.href ?? (SOURCE_HREF[s.type] ?? (() => "#"))(s.id)}
                         className="inline-flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-0.5 text-[11px] hover:border-brand/60">
                         <FileText size={11} /> {s.title}
+                        {s.corpus === "library" && s.path ? <span className="text-muted"> · {s.path}</span> : null}
                       </Link>
                     ))}
                   </div>

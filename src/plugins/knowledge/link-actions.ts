@@ -3,27 +3,61 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { canWriteProject } from "@/lib/rbac";
+import { canWriteProject, requirePermission } from "@/lib/rbac";
 import { canViewArticle, articleVisibilityWhere } from "@/lib/knowledge-access";
 import type { SessionUser } from "@/lib/auth";
+import { getVaultConnection, folderForProjectWrite } from "@/lib/knowledge/vault";
+import { ingestVaultFile } from "@/lib/knowledge/ingest-file";
+import { attachmentEntitySlug, vaultAttachmentFolder } from "@/lib/knowledge/vault-layout";
 
-export type LinkTargetType = "task" | "deliverable" | "requirement";
+export type LinkTargetType = "task" | "deliverable" | "requirement" | "project" | "verification";
 
-async function resolveTargetProjectId(targetType: LinkTargetType, targetId: string): Promise<string | null> {
+export type KnowledgeLinkItem = {
+  id: string;
+  articleId: string;
+  title: string;
+  externalSource: string | null;
+  kind: string;
+  fileName: string | null;
+};
+
+async function resolveTargetMeta(
+  targetType: LinkTargetType,
+  targetId: string,
+): Promise<{ projectId: string; title: string } | null> {
   switch (targetType) {
     case "task": {
-      const t = await prisma.task.findUnique({ where: { id: targetId }, select: { projectId: true } });
-      return t?.projectId ?? null;
+      const t = await prisma.task.findUnique({ where: { id: targetId }, select: { projectId: true, title: true } });
+      return t ? { projectId: t.projectId, title: t.title } : null;
     }
     case "deliverable": {
-      const d = await prisma.deliverable.findUnique({ where: { id: targetId }, select: { projectId: true } });
-      return d?.projectId ?? null;
+      const d = await prisma.deliverable.findUnique({ where: { id: targetId }, select: { projectId: true, name: true } });
+      return d ? { projectId: d.projectId, title: d.name } : null;
     }
     case "requirement": {
-      const r = await prisma.requirement.findUnique({ where: { id: targetId }, select: { projectId: true } });
-      return r?.projectId ?? null;
+      const r = await prisma.requirement.findUnique({
+        where: { id: targetId },
+        select: { projectId: true, code: true, title: true },
+      });
+      return r ? { projectId: r.projectId, title: r.code ? `${r.code} ${r.title}` : r.title } : null;
+    }
+    case "project": {
+      const p = await prisma.project.findUnique({ where: { id: targetId }, select: { id: true, name: true } });
+      return p ? { projectId: p.id, title: p.name } : null;
+    }
+    case "verification": {
+      const v = await prisma.verificationCase.findUnique({
+        where: { id: targetId },
+        select: { projectId: true, name: true },
+      });
+      return v ? { projectId: v.projectId, title: v.name } : null;
     }
   }
+}
+
+async function resolveTargetProjectId(targetType: LinkTargetType, targetId: string): Promise<string | null> {
+  const meta = await resolveTargetMeta(targetType, targetId);
+  return meta?.projectId ?? null;
 }
 
 async function assertCanLinkTarget(session: SessionUser, targetType: LinkTargetType, targetId: string) {
@@ -35,17 +69,56 @@ async function assertCanLinkTarget(session: SessionUser, targetType: LinkTargetT
   return projectId;
 }
 
-export async function getKnowledgeLinksAction(targetType: LinkTargetType, targetId: string) {
+async function upsertLink(input: {
+  articleId: string;
+  targetType: LinkTargetType;
+  targetId: string;
+  createdBy: string;
+}) {
+  await prisma.knowledgeLink.upsert({
+    where: {
+      articleId_targetType_targetId: {
+        articleId: input.articleId,
+        targetType: input.targetType,
+        targetId: input.targetId,
+      },
+    },
+    create: {
+      articleId: input.articleId,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      createdBy: input.createdBy,
+    },
+    update: {},
+  });
+}
+
+function revalidateLinkedPaths(articleId?: string) {
+  revalidatePath("/board");
+  revalidatePath("/deliverables");
+  revalidatePath("/requirements");
+  revalidatePath("/planning");
+  revalidatePath("/projects");
+  revalidatePath("/verification");
+  revalidatePath("/knowledge");
+  if (articleId) revalidatePath(`/knowledge/${articleId}`);
+}
+
+export async function getKnowledgeLinksAction(targetType: LinkTargetType, targetId: string): Promise<KnowledgeLinkItem[]> {
   const session = await getSession();
   if (!session) throw new Error("Nao autenticado");
 
   const links = await prisma.knowledgeLink.findMany({
     where: { targetType, targetId },
-    include: { article: { select: { id: true, title: true, externalSource: true, projectId: true, authorId: true } } },
+    include: {
+      article: {
+        select: { id: true, title: true, externalSource: true, projectId: true, authorId: true, kind: true, fileName: true },
+      },
+    },
     orderBy: { createdAt: "desc" },
   });
 
-  const visible = [];
+  const visible: KnowledgeLinkItem[] = [];
   for (const l of links) {
     if (await canViewArticle(session, l.article)) {
       visible.push({
@@ -53,6 +126,8 @@ export async function getKnowledgeLinksAction(targetType: LinkTargetType, target
         articleId: l.article.id,
         title: l.article.title,
         externalSource: l.article.externalSource,
+        kind: l.article.kind,
+        fileName: l.article.fileName,
       });
     }
   }
@@ -103,31 +178,18 @@ export async function linkArticleAction(input: {
     throw new Error("Artigo nao encontrado ou sem acesso.");
   }
 
-  await assertCanLinkTarget(session, input.targetType, input.targetId);
-
-  await prisma.knowledgeLink.upsert({
-    where: {
-      articleId_targetType_targetId: {
-        articleId: input.articleId,
-        targetType: input.targetType,
-        targetId: input.targetId,
-      },
-    },
-    create: {
+  const projectId = await assertCanLinkTarget(session, input.targetType, input.targetId);
+  await upsertLink({ ...input, createdBy: session.id });
+  if (input.targetType !== "project") {
+    await upsertLink({
       articleId: input.articleId,
-      targetType: input.targetType,
-      targetId: input.targetId,
+      targetType: "project",
+      targetId: projectId,
       createdBy: session.id,
-    },
-    update: {},
-  });
+    });
+  }
 
-  revalidatePath("/board");
-  revalidatePath("/deliverables");
-  revalidatePath("/requirements");
-  revalidatePath("/planning");
-  revalidatePath("/projects");
-  revalidatePath(`/knowledge/${input.articleId}`);
+  revalidateLinkedPaths(input.articleId);
 }
 
 export async function unlinkArticleAction(linkId: string) {
@@ -140,12 +202,85 @@ export async function unlinkArticleAction(linkId: string) {
   await assertCanLinkTarget(session, link.targetType as LinkTargetType, link.targetId);
 
   await prisma.knowledgeLink.delete({ where: { id: linkId } });
-  revalidatePath("/board");
-  revalidatePath("/deliverables");
-  revalidatePath("/requirements");
-  revalidatePath("/planning");
-  revalidatePath("/projects");
-  revalidatePath(`/knowledge/${link.articleId}`);
+  revalidateLinkedPaths(link.articleId);
+}
+
+export async function attachFileToEntityAction(formData: FormData): Promise<{ id: string } | { error: string }> {
+  const session = await getSession();
+  if (!session) return { error: "Nao autenticado" };
+  try {
+    await requirePermission("knowledge:create");
+  } catch {
+    return { error: "Sem permissao para enviar arquivos." };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { error: "Selecione um arquivo." };
+
+  const targetType = String(formData.get("targetType") ?? "") as LinkTargetType;
+  const targetId = String(formData.get("targetId") ?? "").trim();
+  const allowed: LinkTargetType[] = ["task", "deliverable", "requirement", "project", "verification"];
+  if (!allowed.includes(targetType) || !targetId) return { error: "Alvo invalido." };
+
+  let projectId: string;
+  let title: string;
+  try {
+    const meta = await resolveTargetMeta(targetType, targetId);
+    if (!meta) return { error: "Entidade nao encontrada." };
+    if (!(await canWriteProject(session, meta.projectId))) {
+      return { error: "Sem permissao de escrita neste projeto." };
+    }
+    projectId = meta.projectId;
+    title = meta.title;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Falha ao anexar." };
+  }
+
+  const conn = await getVaultConnection();
+  if (!conn) return { error: "Nextcloud precisa estar habilitado para enviar arquivos." };
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { key: true, name: true, kind: true },
+  });
+  if (!project) return { error: "Projeto nao encontrado." };
+
+  const slug = targetType === "project" ? undefined : attachmentEntitySlug(title, targetId);
+  const preferred = vaultAttachmentFolder(project.kind, project.key, targetType, slug);
+
+  try {
+    const folder = await folderForProjectWrite(conn, project, preferred);
+    const result = await ingestVaultFile({
+      sessionId: session.id,
+      fileName: file.name,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      folder,
+      projectId,
+      conn,
+    });
+    if ("error" in result) return result;
+
+    await upsertLink({
+      articleId: result.id,
+      targetType,
+      targetId,
+      createdBy: session.id,
+    });
+    if (targetType !== "project") {
+      await upsertLink({
+        articleId: result.id,
+        targetType: "project",
+        targetId: projectId,
+        createdBy: session.id,
+      });
+    }
+
+    revalidateLinkedPaths(result.id);
+    revalidatePath(`/projects/${projectId}`);
+    return { id: result.id };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Falha ao enviar o arquivo." };
+  }
 }
 
 export type ArticleBacklink = {
@@ -222,6 +357,35 @@ export async function getArticleBacklinksAction(articleId: string): Promise<Arti
           projectKey: r.project.key,
           projectColor: r.project.color,
           href: `/planning?tab=requirements&project=${r.projectId}`,
+        });
+      }
+    } else if (type === "project") {
+      const p = await prisma.project.findUnique({ where: { id: link.targetId } });
+      if (p) {
+        result.push({
+          id: link.id,
+          targetType: type,
+          targetId: p.id,
+          title: `${p.key} — ${p.name}`,
+          projectKey: p.key,
+          projectColor: p.color,
+          href: `/projects/${p.id}?tab=files`,
+        });
+      }
+    } else if (type === "verification") {
+      const v = await prisma.verificationCase.findUnique({
+        where: { id: link.targetId },
+        include: { project: true },
+      });
+      if (v) {
+        result.push({
+          id: link.id,
+          targetType: type,
+          targetId: v.id,
+          title: v.name,
+          projectKey: v.project.key,
+          projectColor: v.project.color,
+          href: "/verification",
         });
       }
     }

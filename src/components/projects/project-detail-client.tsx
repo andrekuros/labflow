@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, FileText, Upload, Bot, KanbanSquare, Settings, ListTodo, FileBarChart, GraduationCap, Newspaper } from "lucide-react";
+import { LayoutDashboard, FileText, Upload, Bot, KanbanSquare, Settings, ListTodo, FileBarChart, GraduationCap, Newspaper, FolderOpen } from "lucide-react";
 import { Card, Badge, Avatar, PageHeader, LinkButton } from "@/components/ui";
 import { AddWorkPackageForm, AddLabelForm, AddMemberForm } from "@/components/projects/project-forms";
 import { WbsTreePanel, type WbsNode } from "@/components/projects/wbs-tree-panel";
@@ -17,6 +17,7 @@ import { ProjectTasksPanel, type ProjectTaskRow } from "@/components/projects/pr
 import { ProjectAcademicPanel } from "@/components/projects/project-academic-panel";
 import { ProjectPaperPanel } from "@/components/projects/project-paper-panel";
 import { AcademicOverviewCard } from "@/components/projects/academic-overview-card";
+import { ProjectFilesPanel } from "@/components/projects/project-files-panel";
 import type { ConopsData } from "@/lib/artifacts/schema";
 import { projectMemberRoleLabel } from "@/lib/projects/membership-roles";
 import { isAcademicKind } from "@/lib/projects/features";
@@ -25,12 +26,14 @@ import type { ProjectFeatures } from "@/lib/projects/features";
 import { PROJECT_KIND_LABELS, type ProjectKind } from "@/lib/projects/features";
 import type { ProjectAcademicMeta } from "@/lib/projects/academic-meta";
 import type { ProjectPaperMeta } from "@/lib/projects/paper-meta";
+import type { ProjectFileRow } from "@/lib/knowledge/project-file-types";
 
 const BASE_TABS = [
   { id: "overview", label: "Visao geral", icon: LayoutDashboard, feature: null },
   { id: "methodology", label: "Metodologia", icon: GraduationCap, feature: "methodology" as const },
   { id: "paper", label: "Artigo", icon: Newspaper, feature: "paperPipeline" as const },
   { id: "tasks", label: "Tarefas", icon: ListTodo, feature: "board" as const },
+  { id: "files", label: "Arquivos", icon: FolderOpen, feature: null },
   { id: "conops", label: "CONOPS", icon: FileText, feature: "conops" as const },
   { id: "import", label: "Importar tarefas", icon: Upload, feature: "board" as const },
   { id: "review", label: "Revisao IA", icon: Bot, feature: null },
@@ -64,6 +67,8 @@ export function ProjectDetailClient({
   features,
   academicMeta,
   paperMeta,
+  libraryFiles,
+  libraryFolder,
 }: {
   project: {
     id: string;
@@ -98,6 +103,8 @@ export function ProjectDetailClient({
   features: ProjectFeatures;
   academicMeta: ProjectAcademicMeta;
   paperMeta: ProjectPaperMeta;
+  libraryFiles: ProjectFileRow[];
+  libraryFolder: string;
 }) {
   const router = useRouter();
   const availableTabs = [
@@ -265,6 +272,15 @@ export function ProjectDetailClient({
           writable={writable}
           tasks={tasks}
           workPackages={workPackages.map((w) => ({ id: w.id, code: w.code, name: w.name }))}
+        />
+      )}
+
+      {tab === "files" && (
+        <ProjectFilesPanel
+          projectId={project.id}
+          writable={writable}
+          files={libraryFiles}
+          libraryFolder={libraryFolder}
         />
       )}
 

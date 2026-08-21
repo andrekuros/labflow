@@ -56,7 +56,26 @@ export async function deleteBoardView(id: string): Promise<{ error?: string }> {
   const prefs = await getUserPreferences();
   const views = (prefs.boardViews ?? []).filter((v) => v.id !== id);
   if (views.length === (prefs.boardViews ?? []).length) return { error: "Modelo nao encontrado" };
-  await saveUserPreferences({ ...prefs, boardViews: views });
+  await saveUserPreferences({
+    ...prefs,
+    boardViews: views,
+    preferredBoardViewId: prefs.preferredBoardViewId === id ? null : prefs.preferredBoardViewId,
+  });
   revalidatePath("/board");
   return {};
+}
+
+export async function setPreferredBoardView(
+  id: string | null,
+): Promise<{ error?: string; preferredBoardViewId?: string | null }> {
+  await requireUser();
+  const prefs = await getUserPreferences();
+  if (id) {
+    const exists = (prefs.boardViews ?? []).some((v) => v.id === id);
+    if (!exists) return { error: "Modelo nao encontrado" };
+  }
+  const preferredBoardViewId = id;
+  await saveUserPreferences({ ...prefs, preferredBoardViewId });
+  revalidatePath("/board");
+  return { preferredBoardViewId };
 }

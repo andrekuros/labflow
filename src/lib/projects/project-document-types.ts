@@ -71,6 +71,7 @@ export type ProjectReportData = {
     description: string | null;
     status: string;
     color: string;
+    kind: string;
   };
   conops: ConopsData;
   members: { name: string; role: string; profilesLabel: string }[];

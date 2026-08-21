@@ -102,6 +102,7 @@ export async function fetchProjectReportData(projectId: string): Promise<Project
       description: project.description,
       status: project.status,
       color: project.color,
+      kind: project.kind,
     },
     conops: parseConops(project.conops),
     members: project.memberships.map((m) => {

@@ -57,7 +57,7 @@ export async function createProject(input: {
     },
   });
 
-  await emit({ type: "project.created", actorId: session.id, projectId: project.id, targetId: project.id, payload: { id: project.id, name: project.name } });
+  await emit({ type: "project.created", actorId: session.id, projectId: project.id, targetId: project.id, payload: { id: project.id, name: project.name, key: project.key, kind: project.kind } });
   await emit({ type: "project.updated", actorId: session.id, projectId: project.id, targetId: project.id, payload: { id: project.id } });
   revalidatePath("/projects");
   return project;

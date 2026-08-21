@@ -11,17 +11,17 @@ type ArticleFolderRef = {
   externalSource: string | null;
 };
 
-function insertNode(root: FolderTreeNode[], parts: string[], leafCount: number) {
+function insertNode(root: FolderTreeNode[], parts: string[], leafCount: number, prefix = "") {
   if (parts.length === 0) return;
   const [head, ...rest] = parts;
-  const path = parts.join("/");
+  const path = prefix ? `${prefix}/${head}` : head;
   let node = root.find((n) => n.name === head);
   if (!node) {
     node = { path, name: head, children: [], articleCount: 0, totalCount: 0 };
     root.push(node);
   }
   if (rest.length === 0) node.articleCount += leafCount;
-  else insertNode(node.children, rest, leafCount);
+  else insertNode(node.children, rest, leafCount, path);
 }
 
 function rollupCounts(nodes: FolderTreeNode[]): number {

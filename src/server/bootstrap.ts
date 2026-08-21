@@ -1,6 +1,8 @@
 import "server-only";
 import { on } from "@/lib/events";
+import { prisma } from "@/lib/db";
 import { ingest, purge } from "@/lib/ai/rag";
+import { articleIngestText } from "@/lib/knowledge/files";
 import { registerBuiltinPlugins } from "@/plugins";
 import { initPluginRegistry, ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
 import { indexTask, indexProject, indexUser, indexAcademicProfile, ensureKnowledgeIndexed } from "@/lib/ai/knowledge-indexer";
@@ -28,7 +30,10 @@ export function bootstrap() {
   on("deliverable.created", (e) => ingestFromEvent("deliverable", e));
   on("deliverable.updated", (e) => ingestFromEvent("deliverable", e));
   on("requirement.created", (e) => ingestFromEvent("requirement", e));
-  on("project.created", (e) => void indexProjectFromEvent(e));
+  on("project.created", (e) => {
+    void indexProjectFromEvent(e);
+    void ensureVaultFromProjectEvent(e);
+  });
   on("project.updated", (e) => void indexProjectFromEvent(e));
   on("user.created", (e) => void indexUserFromEvent(e));
   on("user.updated", (e) => void indexUserFromEvent(e));
@@ -70,6 +75,21 @@ async function ingestArticleFromEvent(event: { projectId?: string | null; payloa
   await ensurePluginRegistry();
   const settings = getPluginSettings("knowledge");
   if (settings.autoIngest === false) return;
+  const id = event.payload?.id as string | undefined;
+  if (id) {
+    const article = await prisma.knowledgeArticle.findUnique({ where: { id } });
+    if (article) {
+      const text = articleIngestText(article);
+      if (!text.trim()) return;
+      await ingest({
+        sourceType: "article",
+        sourceId: article.id,
+        projectId: article.projectId,
+        text,
+      });
+      return;
+    }
+  }
   await ingestFromEvent("article", event);
 }
 
@@ -107,6 +127,17 @@ async function indexProjectFromEvent(event: { payload?: Record<string, unknown> 
   const id = event.payload?.id as string | undefined;
   if (!id) return;
   await indexProject(id);
+}
+
+async function ensureVaultFromProjectEvent(event: { projectId?: string | null; payload?: Record<string, unknown> }) {
+  const id = (event.projectId ?? event.payload?.id) as string | undefined;
+  if (!id) return;
+  try {
+    const { ensureProjectVaultFromId } = await import("@/lib/knowledge/vault");
+    await ensureProjectVaultFromId(id);
+  } catch (err) {
+    console.error("[knowledge] ensure project vault failed", err);
+  }
 }
 
 async function indexUserFromEvent(event: { payload?: Record<string, unknown> }) {

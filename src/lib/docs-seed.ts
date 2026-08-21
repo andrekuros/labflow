@@ -328,13 +328,24 @@ export async function ensureDocArticles() {
     const existing = await prisma.knowledgeArticle.findFirst({
       where: { title: doc.title },
     });
-    if (existing) continue;
+    if (existing) {
+      if (existing.externalSource !== "system") {
+        await prisma.knowledgeArticle.update({
+          where: { id: existing.id },
+          data: { externalSource: "system", kind: "page" },
+        });
+      }
+      continue;
+    }
 
     const article = await prisma.knowledgeArticle.create({
       data: {
         title: doc.title,
         content: doc.content,
         tags: doc.tags,
+        kind: "page",
+        externalSource: "system",
+        extractedText: doc.content,
       },
     });
 

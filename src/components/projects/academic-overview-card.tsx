@@ -95,10 +95,10 @@ export function AcademicOverviewCard({
           <ListTodo size={14} /> {taskCount} tarefas
         </LinkButton>
         <Link
-          href={`/knowledge`}
+          href={`/projects/${projectId}?tab=files`}
           className="inline-flex h-8 items-center gap-1 rounded-md border border-border px-2 text-xs hover:bg-surface2"
         >
-          <BookOpen size={14} /> Conhecimento
+          <BookOpen size={14} /> Arquivos
         </Link>
         <Link href={`/projects/${projectId}?tab=tasks`} className="text-xs text-brand hover:underline self-center">
           Ver tarefas do projeto

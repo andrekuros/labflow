@@ -64,7 +64,18 @@ export default async function BoardPage({
       prisma.user.findUnique({ where: { id: session.id }, select: { preferences: true } }),
     ]);
 
-  const savedViews = parsePreferences(userRow?.preferences).boardViews ?? [];
+  const prefs = parsePreferences(userRow?.preferences);
+  const savedViews = prefs.boardViews ?? [];
+  const preferredBoardViewId = prefs.preferredBoardViewId ?? null;
+
+  const linkCounts = tasks.length
+    ? await prisma.knowledgeLink.groupBy({
+        by: ["targetId"],
+        where: { targetType: "task", targetId: { in: tasks.map((t) => t.id) } },
+        _count: true,
+      })
+    : [];
+  const linkCountByTask = new Map(linkCounts.map((c) => [c.targetId, c._count]));
 
   return (
     <Suspense fallback={<div className="text-sm text-muted">Carregando quadro...</div>}>
@@ -73,6 +84,7 @@ export default async function BoardPage({
         initialProject={initialProject}
         projectLocked={projectLocked}
         savedViews={savedViews}
+        preferredBoardViewId={preferredBoardViewId}
         projects={projects.map((p) => ({ id: p.id, key: p.key, name: p.name, color: p.color }))}
         members={members.map((m) => ({ id: m.id, name: m.name, avatarColor: m.avatarColor }))}
         labels={labels.map((l) => ({ id: l.id, name: l.name, color: l.color, projectId: l.projectId }))}
@@ -102,6 +114,7 @@ export default async function BoardPage({
           checklist: parseChecklist(t.checklistJson),
           assignees: t.assignees.map((a) => ({ id: a.id, name: a.name, avatarColor: a.avatarColor })),
           labels: t.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+          knowledgeLinkCount: linkCountByTask.get(t.id) ?? 0,
         }))}
       />
     </Suspense>

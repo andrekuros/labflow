@@ -1,6 +1,7 @@
 "use client";
 
-import { Folder, FolderOpen, FileText, Shield } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Folder, FolderOpen, FileText, Shield, ChevronRight, ChevronDown } from "lucide-react";
 import { isPathUnderFolders } from "@/plugins/knowledge/folder-path";
 import type { FolderTreeNode } from "@/plugins/knowledge/folder-tree";
 
@@ -11,6 +12,11 @@ type Props = {
   onSelect: (path: string | null) => void;
   adminOnlyFolders?: string[];
 };
+
+function isUnderPath(selected: string | null, path: string): boolean {
+  if (!selected || !path) return false;
+  return selected === path || selected.startsWith(`${path}/`);
+}
 
 function TreeNode({
   node,
@@ -25,28 +31,52 @@ function TreeNode({
   adminOnlyFolders: string[];
   depth?: number;
 }) {
+  const hasChildren = node.children.length > 0;
+  const [open, setOpen] = useState(false);
   const isSelected = selected === node.path;
-  const Icon = isSelected ? FolderOpen : Folder;
+  const Icon = isSelected || (open && hasChildren) ? FolderOpen : Folder;
   const isAdminFolder = node.path !== "" && isPathUnderFolders(node.path, adminOnlyFolders);
+
+  useEffect(() => {
+    if (hasChildren && isUnderPath(selected, node.path) && selected !== node.path) {
+      setOpen(true);
+    }
+  }, [selected, node.path, hasChildren]);
 
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => onSelect(node.path)}
-        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-surface2 ${isSelected ? "bg-surface2 font-medium text-brand" : "text-fg"}`}
-        style={{ paddingLeft: `${8 + depth * 12}px` }}
+      <div
+        className={`flex w-full items-center rounded-lg hover:bg-surface2 ${isSelected ? "bg-surface2 font-medium text-brand" : "text-fg"}`}
+        style={{ paddingLeft: `${4 + depth * 12}px` }}
       >
-        <Icon size={14} className={`shrink-0 ${isAdminFolder ? "text-red-400" : "text-muted"}`} />
-        <span className="truncate flex-1">{node.name}</span>
-        {isAdminFolder && (
-          <span title="Somente administradores">
-            <Shield size={12} className="shrink-0 text-red-400" />
-          </span>
+        {hasChildren ? (
+          <button
+            type="button"
+            aria-label={open ? "Recolher pasta" : "Expandir pasta"}
+            onClick={() => setOpen((v) => !v)}
+            className="shrink-0 rounded p-0.5 text-muted hover:text-fg"
+          >
+            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        ) : (
+          <span className="inline-block w-[18px] shrink-0" />
         )}
-        <span className="text-[11px] text-muted">{node.totalCount}</span>
-      </button>
-      {node.children.map((child) => (
+        <button
+          type="button"
+          onClick={() => onSelect(node.path)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 text-left text-sm"
+        >
+          <Icon size={14} className={`shrink-0 ${isAdminFolder ? "text-red-400" : "text-muted"}`} />
+          <span className="truncate flex-1">{node.name}</span>
+          {isAdminFolder && (
+            <span title="Somente administradores">
+              <Shield size={12} className="shrink-0 text-red-400" />
+            </span>
+          )}
+          <span className="text-[11px] text-muted">{node.totalCount}</span>
+        </button>
+      </div>
+      {open && hasChildren && node.children.map((child) => (
         <TreeNode
           key={child.path}
           node={child}
@@ -74,7 +104,7 @@ export function KnowledgeFolderTree({ tree, localCount, selected, onSelect, admi
       </button>
       {tree.map((node) => (
         <TreeNode
-          key={node.path || node.name}
+          key={childKey(node)}
           node={node}
           selected={selected}
           onSelect={onSelect}
@@ -94,4 +124,8 @@ export function KnowledgeFolderTree({ tree, localCount, selected, onSelect, admi
       )}
     </div>
   );
+}
+
+function childKey(node: FolderTreeNode) {
+  return node.path || node.name;
 }

@@ -37,7 +37,7 @@ export const handlers: PluginApiHandlers = {
 
   "POST articles": async ({ user }, body) => {
     if (!(await hasPermission(user, "knowledge:create"))) return jsonError("Sem permissao", 403);
-    const input = body as { title?: string; content?: string; tags?: string; projectId?: string | null };
+    const input = body as { title?: string; content?: string; tags?: string; projectId?: string | null; folder?: string | null };
     if (!input?.title?.trim() || input.content === undefined) {
       return jsonError("Campos title e content sao obrigatorios");
     }
@@ -47,6 +47,7 @@ export const handlers: PluginApiHandlers = {
         content: input.content!,
         tags: input.tags,
         projectId: input.projectId,
+        folder: input.folder,
       }),
     );
   },

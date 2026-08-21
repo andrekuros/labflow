@@ -532,7 +532,7 @@ function NextcloudForm({
   const [autoSync, setAutoSync] = useState(initial.autoSyncEnabled);
   const [autoSyncMinutes, setAutoSyncMinutes] = useState(initial.autoSyncIntervalMinutes || 60);
   const [folderMapJson, setFolderMapJson] = useState(
-    initial.folderProjectMapJson || '{\n  "projetos/EEG": "EEG"\n}',
+    initial.folderProjectMapJson || '{\n  "lab/eeg": "EEG"\n}',
   );
   const [excludeFolders, setExcludeFolders] = useState(initial.excludeFoldersText || "templates");
   const [adminOnlyFolders, setAdminOnlyFolders] = useState(initial.adminOnlyFoldersText || "admin");
@@ -624,8 +624,11 @@ function NextcloudForm({
         </div>
 
         <div className="md:col-span-2">
-          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-map">Mapeamento pasta → projeto (JSON)</label>
-          <textarea id="nc-map" rows={5} className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={folderMapJson} onChange={(e) => setFolderMapJson(e.target.value)} placeholder='{"projetos/EEG": "EEG", "equipamentos": ""}' />
+          <label className="mb-1 block text-xs font-medium text-muted" htmlFor="nc-map">Mapeamento pasta → projeto (JSON, opcional)</label>
+          <textarea id="nc-map" rows={5} className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 font-mono text-xs" value={folderMapJson} onChange={(e) => setFolderMapJson(e.target.value)} placeholder='{"lab/eeg": "EEG"}' />
+          <p className="mt-1 text-[11px] text-muted">
+            Override manual. Por padrao o LabFlow associa <span className="font-mono">lab/{"{key}"}</span>, <span className="font-mono">academic/...</span> e <span className="font-mono">admin/{"{key}"}</span> automaticamente.
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2 md:col-span-2">

@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { isPathUnderFolders } from "@/plugins/knowledge/folder-path";
+import { projectKeyFromVaultPath } from "@/lib/knowledge/vault-layout";
 
 export { isPathUnderFolders, articleIsAdminOnly } from "@/plugins/knowledge/folder-path";
 
@@ -52,6 +53,12 @@ export async function resolveProjectId(opts: {
     if (byKey) return byKey.id;
     const byId = await prisma.project.findUnique({ where: { id: mapped } });
     if (byId) return byId.id;
+  }
+
+  const fromPath = projectKeyFromVaultPath(opts.filePath);
+  if (fromPath) {
+    const byKey = await prisma.project.findUnique({ where: { key: fromPath } });
+    if (byKey) return byKey.id;
   }
 
   return null;

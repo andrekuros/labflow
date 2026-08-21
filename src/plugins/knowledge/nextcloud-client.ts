@@ -1,4 +1,5 @@
 import "server-only";
+import { LIBRARY_FILE_RE, PAGE_FILE_RE } from "@/lib/knowledge/files";
 
 export type DavEntry = {
   path: string;
@@ -118,7 +119,7 @@ export async function propfind(
   return parsePropfind(xml, conn);
 }
 
-export async function getFile(conn: NextcloudConnection, relativePath: string): Promise<string> {
+export async function getFileBytes(conn: NextcloudConnection, relativePath: string): Promise<Buffer> {
   const url = buildDavUrl(conn, relativePath);
   const res = await fetch(url, {
     headers: { Authorization: authHeader(conn.username, conn.password) },
@@ -126,31 +127,51 @@ export async function getFile(conn: NextcloudConnection, relativePath: string): 
   if (!res.ok) {
     throw new Error(`Nextcloud GET falhou (${res.status}) para ${relativePath}`);
   }
-  return res.text();
+  return Buffer.from(await res.arrayBuffer());
+}
+
+export async function getFile(conn: NextcloudConnection, relativePath: string): Promise<string> {
+  const bytes = await getFileBytes(conn, relativePath);
+  return bytes.toString("utf8");
 }
 
 export async function listMarkdownFiles(conn: NextcloudConnection): Promise<DavEntry[]> {
   const entries = await propfind(conn, "", "infinity");
-  return entries.filter((e) => !e.isDirectory && /\.(md|txt)$/i.test(e.name));
+  return entries.filter((e) => !e.isDirectory && PAGE_FILE_RE.test(e.name));
+}
+
+export async function listLibraryFiles(conn: NextcloudConnection): Promise<DavEntry[]> {
+  const entries = await propfind(conn, "", "infinity");
+  return entries.filter((e) => !e.isDirectory && LIBRARY_FILE_RE.test(e.name));
 }
 
 export async function listAllEntries(conn: NextcloudConnection): Promise<DavEntry[]> {
   return propfind(conn, "", "infinity");
 }
 
-export async function putFile(conn: NextcloudConnection, relativePath: string, content: string): Promise<void> {
+export async function putFile(conn: NextcloudConnection, relativePath: string, content: string): Promise<string | null> {
+  return putFileBytes(conn, relativePath, Buffer.from(content, "utf8"), "text/markdown; charset=utf-8");
+}
+
+export async function putFileBytes(
+  conn: NextcloudConnection,
+  relativePath: string,
+  body: Uint8Array,
+  contentType: string,
+): Promise<string | null> {
   const url = buildDavUrl(conn, relativePath);
   const res = await fetch(url, {
     method: "PUT",
     headers: {
       Authorization: authHeader(conn.username, conn.password),
-      "Content-Type": "text/markdown; charset=utf-8",
+      "Content-Type": contentType,
     },
-    body: content,
+    body: Buffer.from(body),
   });
   if (!res.ok) {
     throw new Error(`Nextcloud PUT falhou (${res.status}) para ${relativePath}`);
   }
+  return res.headers.get("etag")?.replace(/"/g, "") ?? null;
 }
 
 export async function mkcol(conn: NextcloudConnection, relativePath: string): Promise<void> {
@@ -171,6 +192,30 @@ export async function ensurePath(conn: NextcloudConnection, relativePath: string
     acc = acc ? `${acc}/${part}` : part;
     await mkcol(conn, acc);
   }
+}
+
+export async function fileExists(conn: NextcloudConnection, relativePath: string): Promise<boolean> {
+  const url = buildDavUrl(conn, relativePath);
+  const res = await fetch(url, {
+    method: "HEAD",
+    headers: { Authorization: authHeader(conn.username, conn.password) },
+  });
+  if (res.ok) return true;
+  if (res.status === 404 || res.status === 405) {
+    if (res.status === 405) {
+      const get = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: authHeader(conn.username, conn.password) },
+      });
+      return get.ok;
+    }
+    return false;
+  }
+  const get = await fetch(url, {
+    method: "GET",
+    headers: { Authorization: authHeader(conn.username, conn.password) },
+  });
+  return get.ok;
 }
 
 export async function testNextcloudConnection(conn: NextcloudConnection): Promise<{ ok: boolean; message: string }> {

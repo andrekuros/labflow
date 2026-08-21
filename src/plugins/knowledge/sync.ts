@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { emit } from "@/lib/events";
 import { getPluginSettings, setPluginSettings, ensurePluginRegistry } from "@/plugins/registry";
 import { getNextcloudSettings } from "@/plugins/knowledge/nextcloud-config";
-import { getFile, listMarkdownFiles } from "@/plugins/knowledge/nextcloud-client";
+import { getFileBytes, listLibraryFiles } from "@/plugins/knowledge/nextcloud-client";
 import { notifyAdmins } from "@/lib/notifications";
 import { parseFrontmatter } from "@/plugins/knowledge/frontmatter";
 import {
@@ -11,6 +11,8 @@ import {
   parentFolderFromPath,
   resolveProjectId,
 } from "@/plugins/knowledge/folder-map";
+import { extractLibraryFile } from "@/lib/knowledge/extract";
+import { articleIngestText, kindFromFileName, mimeFromFileName, titleFromFileName } from "@/lib/knowledge/files";
 
 export type SyncResult = {
   ok: boolean;
@@ -25,8 +27,7 @@ function titleFromContent(path: string, body: string, metaTitle?: string): strin
   if (metaTitle?.trim()) return metaTitle.trim();
   const heading = body.match(/^#\s+(.+)$/m);
   if (heading?.[1]) return heading[1].trim();
-  const base = path.split("/").pop() ?? path;
-  return base.replace(/\.(md|txt)$/i, "").replace(/[-_]/g, " ");
+  return titleFromFileName(path);
 }
 
 function mergeTags(path: string, metaTags?: string[]): string {
@@ -67,7 +68,7 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
   let skipped = 0;
 
   try {
-    const files = await listMarkdownFiles(conn);
+    const files = await listLibraryFiles(conn);
     const seenPaths = new Set<string>();
     const now = new Date();
 
@@ -87,25 +88,54 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
         continue;
       }
 
-      const raw = await getFile(conn, file.path);
-      const { meta, body } = parseFrontmatter(raw);
-      const title = titleFromContent(file.path, body, meta.title);
-      const tags = mergeTags(file.path, meta.tags);
+      const bytes = await getFileBytes(conn, file.path);
+      const extracted = await extractLibraryFile(file.name, bytes);
+      const kind = kindFromFileName(file.name);
+      const fileName = file.name;
+      const mimeType = extracted.mimeType || mimeFromFileName(file.name);
       const externalFolder = parentFolderFromPath(file.path);
-      const externalStatus = normalizeStatus(meta.status);
-      const projectId = await resolveProjectId({
-        frontmatterProject: meta.project,
-        frontmatterProjectId: meta.projectId,
-        filePath: file.path,
-        folderProjectMap: cfg.folderProjectMap,
-      });
 
-      const content = body.trim() ? body : raw;
+      let title: string;
+      let tags: string;
+      let content = "";
+      let extractedText = "";
+      let externalStatus: string | null = null;
+      let projectId: string | null = null;
+
+      if (kind === "page") {
+        const raw = bytes.toString("utf8");
+        const { meta, body } = parseFrontmatter(raw);
+        title = titleFromContent(file.path, body, meta.title);
+        tags = mergeTags(file.path, meta.tags);
+        content = body.trim() ? body : raw;
+        extractedText = body.trim();
+        externalStatus = normalizeStatus(meta.status);
+        projectId = await resolveProjectId({
+          frontmatterProject: meta.project,
+          frontmatterProjectId: meta.projectId,
+          filePath: file.path,
+          folderProjectMap: cfg.folderProjectMap,
+        });
+      } else {
+        title = titleFromFileName(file.path);
+        tags = mergeTags(file.path);
+        extractedText = extracted.text;
+        projectId = await resolveProjectId({
+          filePath: file.path,
+          folderProjectMap: cfg.folderProjectMap,
+        });
+      }
+
       const data = {
         title,
         content,
         tags,
         projectId,
+        kind,
+        mimeType,
+        fileName,
+        byteSize: bytes.byteLength,
+        extractedText,
         externalSource: "nextcloud" as const,
         externalPath: file.path,
         externalFolder: externalFolder || null,
@@ -113,6 +143,8 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
         externalStatus,
         externalSyncedAt: now,
       };
+
+      const ingestPayload = articleIngestText({ title, content, extractedText });
 
       if (existing) {
         const article = await prisma.knowledgeArticle.update({
@@ -124,7 +156,7 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
           actorId: actorId ?? null,
           projectId: article.projectId,
           targetId: article.id,
-          payload: { id: article.id, title: article.title, content: article.content },
+          payload: { id: article.id, title: article.title, content: ingestPayload },
         });
         updated++;
       } else {
@@ -136,7 +168,7 @@ export async function syncNextcloudKnowledge(actorId?: string): Promise<SyncResu
           actorId: actorId ?? null,
           projectId: article.projectId,
           targetId: article.id,
-          payload: { id: article.id, title: article.title, content: article.content },
+          payload: { id: article.id, title: article.title, content: ingestPayload },
         });
         created++;
       }

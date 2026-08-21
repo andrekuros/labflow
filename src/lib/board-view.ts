@@ -194,3 +194,21 @@ export function migrateLegacyBoardParams(sp: URLSearchParams): URLSearchParams {
   }
   return next;
 }
+
+/** True when the URL carries an explicit board state (filters / hide / cards / view). */
+export function boardUrlHasExplicitState(sp: URLSearchParams): boolean {
+  const keys = [
+    "view",
+    "projects",
+    "project",
+    "assignees",
+    "assignee",
+    "labels",
+    "sprints",
+    "priorities",
+    "q",
+    "hide",
+    "cards",
+  ];
+  return keys.some((k) => Boolean(sp.get(k)?.trim()));
+}

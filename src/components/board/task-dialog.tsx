@@ -84,6 +84,7 @@ export function TaskDialog({
       sprintId: t.sprintId, workPackageId: t.workPackageId,
       assignees: t.assignees.map((a) => ({ id: a.id, name: a.name, avatarColor: a.avatarColor })),
       labels: t.labels.map((l) => ({ id: l.id, name: l.name, color: l.color })),
+      knowledgeLinkCount: task?.knowledgeLinkCount ?? 0,
     };
   }
 

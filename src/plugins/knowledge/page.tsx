@@ -11,17 +11,16 @@ import { ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
 import { PageHeader } from "@/components/ui";
 import { KnowledgeClient } from "@/components/knowledge/knowledge-client";
 
-const PAGE_SIZE = 30;
+const MAX_ARTICLES = 1000;
 
 export default async function KnowledgePage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; folder?: string }>;
+  searchParams: Promise<{ folder?: string; doc?: string }>;
 }) {
   const session = await requireUser();
   await ensurePluginRegistry();
-  const { page: pageParam, folder } = await searchParams;
-  const page = Math.max(1, Number(pageParam ?? 1) || 1);
+  const { folder, doc } = await searchParams;
 
   const [canCreate, canManage] = await Promise.all([
     hasPermission(session, "knowledge:create"),
@@ -38,44 +37,36 @@ export default async function KnowledgePage({
   };
   const adminFolders = getAdminOnlyFolders();
 
-  const [totalCount, articles, projects, nextcloud, healthReport, settings] = await Promise.all([
-    prisma.knowledgeArticle.count({ where: scopedVisibility }),
+  const [articles, projects, nextcloud, healthReport, settings] = await Promise.all([
     prisma.knowledgeArticle.findMany({
       where: scopedVisibility,
       include: { project: true, author: true },
       orderBy: { updatedAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      take: MAX_ARTICLES,
     }),
     prisma.project.findMany({
       where: { id: { in: wsIds } },
       orderBy: { name: "asc" },
     }),
-    canManage ? getNextcloudSettingsForUi() : Promise.resolve(null),
+    getNextcloudSettingsForUi(),
     canManage ? computeKnowledgeHealth() : Promise.resolve(null),
     Promise.resolve(getPluginSettings("knowledge")),
   ]);
 
-  const allForTree = await prisma.knowledgeArticle.findMany({
-    where: visibility,
-    select: { externalFolder: true, externalSource: true },
-  });
-  const folderTree = buildFolderTree(allForTree);
-
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const folderTree = buildFolderTree(articles);
   const semanticSearchEnabled = settings.enableSemanticSearch !== false;
 
   return (
     <div>
       <PageHeader
-        title="Base de conhecimento"
-        description="Navegue por pastas do Nextcloud, use templates e alimente o assistente de IA com busca semantica."
+        title="Biblioteca"
+        description="Vault Nextcloud como fonte da verdade: paginas, PDF, DOCX, Excel e PowerPoint organizados por pasta, vinculados ao LabFlow e indexados para a IA."
       />
       <KnowledgeClient
         canCreate={canCreate}
         canManage={canManage}
         semanticSearchEnabled={semanticSearchEnabled}
-        nextcloud={nextcloud?.enabled ? {
+        nextcloud={nextcloud.enabled ? {
           enabled: true,
           lastSyncAt: nextcloud.lastSyncAt,
           lastSyncMessage: nextcloud.lastSyncMessage,
@@ -83,7 +74,7 @@ export default async function KnowledgePage({
         } : null}
         folderTree={folderTree}
         healthReport={healthReport}
-        projects={projects.map((p) => ({ id: p.id, key: p.key, name: p.name }))}
+        projects={projects.map((p) => ({ id: p.id, key: p.key, name: p.name, kind: p.kind }))}
         articles={articles.map((a) => ({
           id: a.id,
           title: a.title,
@@ -92,13 +83,15 @@ export default async function KnowledgePage({
           projectKey: a.project?.key ?? null,
           projectColor: a.project?.color ?? null,
           author: a.author?.name ?? (a.externalSource === "nextcloud" ? "Nextcloud" : "Desconhecido"),
+          kind: a.kind,
+          fileName: a.fileName,
           externalSource: a.externalSource,
           externalFolder: a.externalFolder,
           externalStatus: a.externalStatus,
           adminOnly: articleIsAdminOnly(a, adminFolders),
         }))}
-        pagination={{ page, totalPages, totalCount, pageSize: PAGE_SIZE }}
         initialFolder={folder ?? "all"}
+        initialDoc={doc ?? null}
         adminOnlyFolders={adminFolders}
       />
     </div>

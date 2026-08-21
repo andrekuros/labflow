@@ -19,10 +19,10 @@ export async function ensureAcademicMethodologyArticle() {
   const article = existing
     ? await prisma.knowledgeArticle.update({
         where: { id: existing.id },
-        data: { content, tags },
+        data: { content, tags, externalSource: "system", kind: "page", extractedText: content },
       })
     : await prisma.knowledgeArticle.create({
-        data: { title: METHODOLOGY_ARTICLE_TITLE, content, tags },
+        data: { title: METHODOLOGY_ARTICLE_TITLE, content, tags, externalSource: "system", kind: "page", extractedText: content },
       });
 
   await ingest({

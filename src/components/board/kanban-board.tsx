@@ -22,12 +22,18 @@ import {
   Eye,
   Trash2,
   Bookmark,
+  Star,
+  Paperclip,
 } from "lucide-react";
 import { Button, Input, Badge, Avatar, PageHeader } from "@/components/ui";
 import { formatDate, daysUntil, cn } from "@/lib/utils";
 import { checklistProgress } from "@/lib/task-checklist";
 import { moveTask } from "@/plugins/board/actions";
-import { deleteBoardView, saveBoardView } from "@/plugins/board/view-actions";
+import {
+  deleteBoardView,
+  saveBoardView,
+  setPreferredBoardView,
+} from "@/plugins/board/view-actions";
 import { TaskDialog } from "@/components/board/task-dialog";
 import { AddCategoryDialog } from "@/components/board/add-category-dialog";
 import { MultiFilter } from "@/components/board/multi-filter";
@@ -45,6 +51,7 @@ import {
   boardStateFromSearchParams,
   boardStateToSearchParams,
   boardStatesEqual,
+  boardUrlHasExplicitState,
   CARD_FIELD_LABELS,
   CARD_FIELD_IDS,
   defaultBoardViewState,
@@ -65,6 +72,7 @@ export function KanbanBoard({
   canWrite,
   projectColumns,
   savedViews: initialViews,
+  preferredBoardViewId: initialPreferredViewId = null,
   initialProject = "",
   projectLocked = false,
 }: {
@@ -78,6 +86,7 @@ export function KanbanBoard({
   canWrite: Record<string, boolean>;
   projectColumns: Record<string, string[]>;
   savedViews: SavedBoardView[];
+  preferredBoardViewId?: string | null;
   initialProject?: string;
   /** When true, project filter is fixed to initialProject (workspace mode). */
   projectLocked?: boolean;
@@ -88,20 +97,21 @@ export function KanbanBoard({
 
   const [tasks, setTasks] = useState(initialTasks);
   const [views, setViews] = useState(initialViews);
+  const [preferredViewId, setPreferredViewId] = useState<string | null>(initialPreferredViewId);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<{ task: BoardTask | null; status?: string } | null>(null);
   const [panel, setPanel] = useState<"columns" | "cards" | "views" | null>(null);
-  const [viewName, setViewName] = useState("");
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
-  const applyingUrl = useRef(false);
-  const lastWrittenQs = useRef<string | null>(null);
 
   function withLockedProject(next: BoardViewState): BoardViewState {
     if (!(projectLocked && initialProject)) return next;
     return { ...next, filters: { ...next.filters, projects: [initialProject] } };
   }
 
-  function resolveFromParams(raw: URLSearchParams, viewList: SavedBoardView[]): {
+  function resolveFromParams(
+    raw: URLSearchParams,
+    viewList: SavedBoardView[],
+    preferredId: string | null,
+  ): {
     state: BoardViewState;
     viewId: string | null;
     viewName: string;
@@ -122,6 +132,22 @@ export function KanbanBoard({
         };
       }
     }
+
+    if (!boardUrlHasExplicitState(migrated) && preferredId) {
+      const preferred = viewList.find((v) => v.id === preferredId);
+      if (preferred) {
+        return {
+          state: withLockedProject({
+            filters: { ...preferred.filters },
+            hiddenColumns: [...preferred.hiddenColumns],
+            cardFields: [...preferred.cardFields],
+          }),
+          viewId: preferred.id,
+          viewName: preferred.name,
+        };
+      }
+    }
+
     const fromUrl = boardStateFromSearchParams(migrated);
     if (!fromUrl.filters.projects.length && initialProject) {
       fromUrl.filters.projects = [initialProject];
@@ -129,18 +155,31 @@ export function KanbanBoard({
     return { state: withLockedProject(fromUrl), viewId: null, viewName: "" };
   }
 
-  const [state, setState] = useState<BoardViewState>(() =>
-    resolveFromParams(new URLSearchParams(searchParams.toString()), initialViews).state,
+  const [boot] = useState(() =>
+    resolveFromParams(
+      new URLSearchParams(searchParams.toString()),
+      initialViews,
+      initialPreferredViewId,
+    ),
   );
+  const [state, setState] = useState<BoardViewState>(boot.state);
+  const [viewName, setViewName] = useState(boot.viewName);
+  const [activeViewId, setActiveViewId] = useState<string | null>(boot.viewId);
+  const applyingUrl = useRef(false);
+  const lastWrittenQs = useRef<string | null>(null);
 
   useEffect(() => {
     setViews(initialViews);
   }, [initialViews]);
 
   useEffect(() => {
+    setPreferredViewId(initialPreferredViewId);
+  }, [initialPreferredViewId]);
+
+  useEffect(() => {
     const qs = searchParams.toString();
     if (lastWrittenQs.current !== null && qs === lastWrittenQs.current) return;
-    const resolved = resolveFromParams(new URLSearchParams(qs), views);
+    const resolved = resolveFromParams(new URLSearchParams(qs), views, preferredViewId);
     applyingUrl.current = true;
     setActiveViewId(resolved.viewId);
     setViewName(resolved.viewName);
@@ -387,6 +426,18 @@ export function KanbanBoard({
     if (result.error) return;
     setViews((prev) => prev.filter((v) => v.id !== id));
     if (activeViewId === id) setActiveViewId(null);
+    if (preferredViewId === id) setPreferredViewId(null);
+  }
+
+  async function handleTogglePreferred(id: string) {
+    const next = preferredViewId === id ? null : id;
+    setPreferredViewId(next);
+    const result = await setPreferredBoardView(next);
+    if (result.error) {
+      setPreferredViewId(preferredViewId);
+      return;
+    }
+    setPreferredViewId(result.preferredBoardViewId ?? null);
   }
 
   function applyView(view: SavedBoardView) {
@@ -500,24 +551,27 @@ export function KanbanBoard({
             size="sm"
             onClick={() => setPanel((p) => (p === "columns" ? null : "columns"))}
             title="Colunas visiveis"
+            aria-label="Colunas visiveis"
           >
-            <Columns3 size={14} /> Colunas
+            <Columns3 size={14} />
           </Button>
           <Button
             variant={panel === "cards" ? "primary" : "outline"}
             size="sm"
             onClick={() => setPanel((p) => (p === "cards" ? null : "cards"))}
             title="Campos do cartao"
+            aria-label="Campos do cartao"
           >
-            <Eye size={14} /> Cartoes
+            <Eye size={14} />
           </Button>
           <Button
             variant={panel === "views" ? "primary" : "outline"}
             size="sm"
             onClick={() => setPanel((p) => (p === "views" ? null : "views"))}
             title="Modelos salvos"
+            aria-label="Modelos salvos"
           >
-            <LayoutTemplate size={14} /> Modelos
+            <LayoutTemplate size={14} />
           </Button>
         </div>
       </div>
@@ -595,28 +649,50 @@ export function KanbanBoard({
             <p className="text-xs text-muted">Nenhum modelo salvo. Filtros tambem ficam na URL.</p>
           ) : (
             <ul className="space-y-1">
-              {views.map((v) => (
-                <li
-                  key={v.id}
-                  className={cn(
-                    "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm",
-                    activeViewId === v.id ? "bg-brand/10" : "hover:bg-surface",
-                  )}
-                >
-                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => applyView(v)}>
-                    <span className="font-medium">{v.name}</span>
-                    <span className="ml-2 text-xs text-muted">/board?view={v.slug}</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded p-1 text-muted hover:bg-surface2 hover:text-red-400"
-                    title="Excluir modelo"
-                    onClick={() => void handleDeleteView(v.id)}
+              {views.map((v) => {
+                const isPreferred = preferredViewId === v.id;
+                return (
+                  <li
+                    key={v.id}
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm",
+                      activeViewId === v.id ? "bg-brand/10" : "hover:bg-surface",
+                    )}
                   >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              ))}
+                    <button
+                      type="button"
+                      className={cn(
+                        "rounded p-1 transition",
+                        isPreferred
+                          ? "text-amber-400 hover:text-amber-300"
+                          : "text-muted hover:bg-surface2 hover:text-amber-400",
+                      )}
+                      title={isPreferred ? "Remover modelo preferido" : "Definir como modelo preferido"}
+                      aria-label={
+                        isPreferred ? "Remover modelo preferido" : "Definir como modelo preferido"
+                      }
+                      aria-pressed={isPreferred}
+                      onClick={() => void handleTogglePreferred(v.id)}
+                    >
+                      <Star size={14} fill={isPreferred ? "currentColor" : "none"} />
+                    </button>
+                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => applyView(v)}>
+                      <span className="font-medium">{v.name}</span>
+                      {isPreferred && (
+                        <span className="ml-2 text-xs text-amber-400/90">preferido</span>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-muted hover:bg-surface2 hover:text-red-400"
+                      title="Excluir modelo"
+                      onClick={() => void handleDeleteView(v.id)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -767,6 +843,11 @@ function CardPreview({ task, fields }: { task: BoardTask; fields: Set<CardFieldI
         </div>
       )}
       <p className="text-sm leading-snug">{task.title}</p>
+      {(task.knowledgeLinkCount ?? 0) > 0 && (
+        <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted">
+          <Paperclip size={11} /> {task.knowledgeLinkCount}
+        </p>
+      )}
       {fields.has("checklist") && steps.total > 0 && (
         <p className="mt-1.5 text-[11px] text-muted">
           Checklist {steps.done}/{steps.total}

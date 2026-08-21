@@ -7,6 +7,8 @@ export type UserPreferences = {
   sidebarCollapsed?: boolean;
   workspace?: WorkspacePrefs;
   boardViews?: SavedBoardView[];
+  /** Saved board view (modelo) applied by default when opening /board. */
+  preferredBoardViewId?: string | null;
 };
 
 export const DEFAULT_PREFERENCES: UserPreferences = {
@@ -14,25 +16,49 @@ export const DEFAULT_PREFERENCES: UserPreferences = {
   sidebarCollapsed: false,
   workspace: { ...DEFAULT_WORKSPACE },
   boardViews: [],
+  preferredBoardViewId: null,
 };
 
 export function parsePreferences(raw: string | null | undefined): UserPreferences {
-  if (!raw) return { ...DEFAULT_PREFERENCES, workspace: { ...DEFAULT_WORKSPACE }, boardViews: [] };
+  if (!raw) {
+    return {
+      ...DEFAULT_PREFERENCES,
+      workspace: { ...DEFAULT_WORKSPACE },
+      boardViews: [],
+      preferredBoardViewId: null,
+    };
+  }
   try {
     const parsed = JSON.parse(raw) as UserPreferences;
+    const boardViews = parseSavedBoardViews(parsed.boardViews);
+    const preferredRaw =
+      typeof parsed.preferredBoardViewId === "string" ? parsed.preferredBoardViewId : null;
+    const preferredBoardViewId =
+      preferredRaw && boardViews.some((v) => v.id === preferredRaw) ? preferredRaw : null;
     return {
       navHidden: Array.isArray(parsed.navHidden) ? parsed.navHidden : [],
       sidebarCollapsed: Boolean(parsed.sidebarCollapsed),
       workspace: parseWorkspace(parsed.workspace),
-      boardViews: parseSavedBoardViews(parsed.boardViews),
+      boardViews,
+      preferredBoardViewId,
     };
   } catch {
-    return { ...DEFAULT_PREFERENCES, workspace: { ...DEFAULT_WORKSPACE }, boardViews: [] };
+    return {
+      ...DEFAULT_PREFERENCES,
+      workspace: { ...DEFAULT_WORKSPACE },
+      boardViews: [],
+      preferredBoardViewId: null,
+    };
   }
 }
 
 export function serializePreferences(prefs: UserPreferences): string {
   const ws = parseWorkspace(prefs.workspace);
+  const boardViews = parseSavedBoardViews(prefs.boardViews);
+  const preferredRaw =
+    typeof prefs.preferredBoardViewId === "string" ? prefs.preferredBoardViewId : null;
+  const preferredBoardViewId =
+    preferredRaw && boardViews.some((v) => v.id === preferredRaw) ? preferredRaw : null;
   return JSON.stringify({
     navHidden: prefs.navHidden ?? [],
     sidebarCollapsed: Boolean(prefs.sidebarCollapsed),
@@ -43,6 +69,7 @@ export function serializePreferences(prefs: UserPreferences): string {
       kindToggles: ws.kindToggles,
       onlyMine: Boolean(ws.onlyMine),
     },
-    boardViews: parseSavedBoardViews(prefs.boardViews),
+    boardViews,
+    preferredBoardViewId,
   });
 }

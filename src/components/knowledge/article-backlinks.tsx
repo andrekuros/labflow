@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { Card, Badge } from "@/components/ui";
-import { ClipboardList, PackageCheck, Target } from "lucide-react";
+import { ClipboardList, PackageCheck, Target, FolderKanban, ShieldCheck } from "lucide-react";
 import type { ArticleBacklink } from "@/plugins/knowledge/link-actions";
 
 const TYPE_LABELS: Record<string, { label: string; icon: typeof ClipboardList }> = {
   task: { label: "Tarefas", icon: ClipboardList },
   deliverable: { label: "Entregaveis", icon: PackageCheck },
   requirement: { label: "Requisitos", icon: Target },
+  project: { label: "Projetos", icon: FolderKanban },
+  verification: { label: "V&V", icon: ShieldCheck },
 };
 
 export function ArticleBacklinks({ backlinks }: { backlinks: ArticleBacklink[] }) {
@@ -32,10 +34,11 @@ export function ArticleBacklinks({ backlinks }: { backlinks: ArticleBacklink[] }
     <Card className="mt-6 p-4">
       <h3 className="mb-3 text-sm font-semibold">Vinculado a</h3>
       <div className="space-y-4">
-        {["task", "deliverable", "requirement"].map((type) => {
+        {["task", "deliverable", "requirement", "project", "verification"].map((type) => {
           const items = grouped.get(type);
           if (!items?.length) return null;
           const meta = TYPE_LABELS[type];
+          if (!meta) return null;
           const Icon = meta.icon;
           return (
             <div key={type}>

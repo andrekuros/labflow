@@ -39,3 +39,15 @@ export function parseFrontmatter(content: string): { meta: ArticleFrontmatter; b
 export function stripFrontmatter(content: string): string {
   return parseFrontmatter(content).body;
 }
+
+export function serializeFrontmatter(meta: ArticleFrontmatter, body: string): string {
+  const lines = ["---"];
+  if (meta.title?.trim()) lines.push(`title: ${meta.title.trim()}`);
+  if (meta.status?.trim()) lines.push(`status: ${meta.status.trim()}`);
+  if (meta.tags && meta.tags.length > 0) lines.push(`tags: ${meta.tags.join(", ")}`);
+  if (meta.project?.trim()) lines.push(`project: ${meta.project.trim()}`);
+  if (meta.projectId?.trim()) lines.push(`projectId: ${meta.projectId.trim()}`);
+  lines.push("---", "");
+  const clean = body.replace(/^\uFEFF/, "").replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+  return `${lines.join("\n")}${clean.replace(/^\n+/, "")}`;
+}

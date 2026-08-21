@@ -374,8 +374,14 @@ model KnowledgeArticle {
   title     String
   content   String   @default("")
   tags      String   @default("") // comma-separated
-  // Nextcloud sync (optional)
-  externalSource   String? // nextcloud
+  // page = markdown/wiki; file = binary in the vault (PDF/DOCX)
+  kind      String   @default("page")
+  mimeType  String?
+  fileName  String?
+  byteSize  Int?
+  extractedText String @default("")
+  // Nextcloud sync (optional). externalSource: nextcloud | system
+  externalSource   String? // nextcloud | system
   externalPath     String? @unique
   externalFolder   String? // parent folder inside vault, e.g. protocolos/eeg
   externalEtag     String?
@@ -390,24 +396,26 @@ model KnowledgeArticle {
 // Generic embedding store, alimentado pela ingestao de conhecimento.
 model Embedding {
   id         String   @id @default(cuid())
-  // sourceType: article | post | comment | task | deliverable
+  // sourceType: article | post | comment | task | deliverable | user | project | requirement | academic
   sourceType String
   sourceId   String
   projectId  String?
   chunk      String
   // JSON-encoded float[] (portavel; troque por coluna vector no pgvector)
   vector     String
+  modelName  String?
+  dimensions Int?
   createdAt  DateTime @default(now())
 
   @@index([sourceType, sourceId])
 }
 
-// Links between knowledge articles and work items (task, deliverable, requirement).
+// Links between knowledge articles and work items (task, deliverable, requirement, project).
 model KnowledgeLink {
   id         String           @id @default(cuid())
   article    KnowledgeArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
   articleId  String
-  // targetType: task | deliverable | requirement
+  // targetType: task | deliverable | requirement | project | verification
   targetType String
   targetId   String
   createdBy  String?

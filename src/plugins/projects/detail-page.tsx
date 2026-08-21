@@ -13,6 +13,8 @@ import { isProjectKind, parseProjectFeatures } from "@/lib/projects/features";
 import { parseAcademicMeta } from "@/lib/projects/academic-meta";
 import { parsePaperMeta } from "@/lib/projects/paper-meta";
 import { PROJECT_BUNDLE_FORMAT_DOC_TITLE } from "@/lib/data-transfer/format-doc";
+import { listProjectLibraryArticles } from "@/lib/knowledge/project-files";
+import { vaultProjectRoot } from "@/lib/knowledge/vault-layout";
 
 export default async function ProjectDetailPage({
   params,
@@ -41,18 +43,14 @@ export default async function ProjectDetailPage({
   });
   if (!project) notFound();
 
-  const [openTasks, deliverables, articles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount, pendingDrafts, formatDoc, projectBundleFormatDoc, artifactSummary] = await Promise.all([
+  const [openTasks, deliverables, libraryFiles, channels, taskIds, deliverableIds, requirementIds, reqApproved, reqTotal, vvPassed, vvTotal, systemElementCount, pendingDrafts, formatDoc, projectBundleFormatDoc, artifactSummary] = await Promise.all([
     prisma.task.count({ where: { projectId: id, status: { not: "done" } } }),
     prisma.deliverable.findMany({
       where: { projectId: id, status: { notIn: ["accepted", "rejected"] } },
       orderBy: { dueDate: "asc" },
       take: 5,
     }),
-    prisma.knowledgeArticle.findMany({
-      where: { projectId: id },
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-    }),
+    listProjectLibraryArticles(id),
     prisma.channel.findMany({ where: { projectId: id }, select: { id: true } }),
     prisma.task.findMany({ where: { projectId: id }, select: { id: true } }),
     prisma.deliverable.findMany({ where: { projectId: id }, select: { id: true } }),
@@ -183,12 +181,14 @@ export default async function ProjectDetailPage({
           status: d.status,
           dueDate: d.dueDate?.toISOString() ?? null,
         })),
-        articles: articles.map((a) => ({
+        articles: libraryFiles.slice(0, 4).map((a) => ({
           id: a.id,
           title: a.title,
           externalSource: a.externalSource,
-          updatedAt: a.updatedAt.toISOString(),
+          updatedAt: a.updatedAt,
         })),
+        fileCount: libraryFiles.length,
+        libraryFolder: vaultProjectRoot(kind, project.key),
         threads: threads.map((t) => ({
           id: t.id,
           title: t.title,
@@ -263,6 +263,8 @@ export default async function ProjectDetailPage({
       labels={project.labels.map((l) => ({ id: l.id, name: l.name, color: l.color }))}
       sprints={project.sprints.map((s) => ({ id: s.id, name: s.name, status: s.status }))}
       memberCandidates={candidates}
+      libraryFiles={libraryFiles}
+      libraryFolder={vaultProjectRoot(kind, project.key)}
     />
   );
 }

@@ -34,7 +34,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
   return (
     <div className="mx-auto max-w-3xl">
       <Link href="/knowledge" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft size={15} /> Conhecimento
+        <ArrowLeft size={15} /> Biblioteca
       </Link>
       <ArticleEditor
         canEdit={canEdit}
@@ -46,9 +46,15 @@ export default async function ArticlePage({ params }: { params: Promise<{ id: st
           id: article.id,
           title: article.title,
           content: article.content,
+          extractedText: article.extractedText,
           tags: article.tags,
           author: article.author?.name ?? (article.externalSource === "nextcloud" ? "Nextcloud" : "Desconhecido"),
           updatedAt: article.updatedAt.toISOString(),
+          kind: article.kind,
+          mimeType: article.mimeType,
+          fileName: article.fileName,
+          indexed: Boolean((article.extractedText || article.content).trim()),
+          externalPath: article.externalPath,
         }}
       />
       <ArticleBacklinks backlinks={backlinks} />

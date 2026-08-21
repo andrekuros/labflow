@@ -5,6 +5,7 @@ import { useTransition } from "react";
 import { Card, Badge, Select } from "@/components/ui";
 import { setVerificationStatus } from "@/plugins/verification/actions";
 import { VV_METHOD, VV_STATUS } from "@/lib/se/constants";
+import { KnowledgeLinksPanel } from "@/components/knowledge/knowledge-links";
 
 type Case = {
   id: string;
@@ -37,12 +38,13 @@ export function VerificationClient({ cases, canWrite }: { cases: Case[]; canWrit
               <th className="py-2 pr-3">Requisito</th>
               <th className="py-2 pr-3">Caso V&V</th>
               <th className="py-2 pr-3">Metodo</th>
-              <th className="py-2">Status</th>
+              <th className="py-2 pr-3">Status</th>
+              <th className="py-2">Evidencia</th>
             </tr>
           </thead>
           <tbody>
             {cases.length === 0 && (
-              <tr><td colSpan={4} className="py-4 text-muted">Nenhum caso de verificacao.</td></tr>
+              <tr><td colSpan={5} className="py-4 text-muted">Nenhum caso de verificacao.</td></tr>
             )}
             {cases.map((c) => (
               <tr key={c.id} className="border-b border-border/60">
@@ -61,6 +63,15 @@ export function VerificationClient({ cases, canWrite }: { cases: Case[]; canWrit
                   >
                     {Object.entries(VV_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                   </Select>
+                </td>
+                <td className="min-w-[220px] py-2 align-top">
+                  <KnowledgeLinksPanel
+                    targetType="verification"
+                    targetId={c.id}
+                    projectId={c.projectId}
+                    canEdit={Boolean(canWrite[c.projectId])}
+                    compact
+                  />
                 </td>
               </tr>
             ))}
