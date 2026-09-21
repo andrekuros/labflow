@@ -29,11 +29,32 @@ export type PluginNav = {
   group?: string;
 };
 
+export type AiToolContext = {
+  userId?: string;
+  /** Resolved session of the user who asked. Use it for RBAC inside `run`. */
+  user?: SessionUser | null;
+};
+
+/**
+ * A function the assistant can call.
+ *
+ * `kind` is the safety contract:
+ *  - "read"    — answers a question; executed immediately.
+ *  - "propose" — must create an `AiDraft` for a human to accept. Never mutate
+ *                domain data directly from a tool: the platform's rule is that
+ *                AI proposes and a person decides.
+ *
+ * `run` is responsible for its own authorization. The assistant refuses to
+ * execute a tool at all when there is no authenticated user.
+ */
 export type AiTool = {
   name: string;
   description: string;
   parameters: Record<string, { type: string; description?: string }>;
-  run: (args: Record<string, unknown>, ctx: { userId?: string }) => Promise<string>;
+  /** Parameter names the model must always supply. */
+  required?: string[];
+  kind?: "read" | "propose";
+  run: (args: Record<string, unknown>, ctx: AiToolContext) => Promise<string>;
 };
 
 export type PluginEventSubscription = {

@@ -18,11 +18,13 @@ export const knowledgeManifest: PluginManifest = {
       parameters: {
         query: { type: "string", description: "Pergunta ou termos de busca" },
       },
+      required: ["query"],
+      kind: "read",
       run: async (args, ctx) => {
         const query = String(args.query ?? "").trim();
         if (!query) return "Erro: informe query.";
-        let user = null;
-        if (ctx.userId) {
+        let user = ctx.user ?? null;
+        if (!user && ctx.userId) {
           const row = await prisma.user.findUnique({ where: { id: ctx.userId } });
           if (row) user = await buildSessionUser(row);
         }
@@ -44,7 +46,8 @@ export const knowledgeManifest: PluginManifest = {
       label: "Busca semantica habilitada",
       type: "boolean",
       defaultValue: true,
-      description: "A qualidade depende de um modelo de embedding real (OpenAI). Ollama usa vetores locais hashed.",
+      description:
+        "A qualidade depende de um modelo de embedding real (OpenAI ou Ollama). Sem provedor, usa vetores locais hashed.",
     },
     {
       key: "autoIngest",
@@ -56,8 +59,10 @@ export const knowledgeManifest: PluginManifest = {
       key: "ragScanLimit",
       label: "Limite de embeddings na busca semantica",
       type: "number",
-      defaultValue: 2000,
-      description: "Quantidade maxima de chunks analisados por busca (padrao 2000).",
+      defaultValue: 0,
+      description:
+        "Teto de seguranca de chunks analisados por busca. 0 = sem limite (recomendado). " +
+        "Acima do teto, os candidatos sao escolhidos por correspondencia de termos, nunca apenas pelos mais recentes.",
     },
     {
       key: "nextcloudEnabled",
@@ -95,7 +100,7 @@ export const knowledgeManifest: PluginManifest = {
   defaultSettings: {
     enableSemanticSearch: true,
     autoIngest: true,
-    ragScanLimit: 2000,
+    ragScanLimit: 0,
     nextcloudEnabled: false,
     nextcloudUrl: "",
     nextcloudUsername: "",

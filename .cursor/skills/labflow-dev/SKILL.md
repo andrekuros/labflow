@@ -7,7 +7,7 @@ description: Desenvolvimento geral no LabFlow (Next.js, Prisma, RBAC, eventos). 
 
 ## Antes de editar
 
-1. Ler `AGENTS.md` (mapa de módulos e arquitetura)
+1. Ler `AGENTS.md` (mapa de módulos, convenções e armadilhas); `docs/ARCHITECTURE.md` se precisar do panorama
 2. Identificar o plugin ou `src/lib/` responsável
 3. Verificar permissões em `permissions-seed.ts` se a feature envolve acesso
 
