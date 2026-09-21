@@ -2,10 +2,13 @@ import { requireUser } from "@/lib/rbac";
 import { canViewAllReports } from "@/lib/user-access";
 import { prisma } from "@/lib/db";
 import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
-import { EmptyState } from "@/components/ui";
 import { ReportsClient } from "@/components/reports/reports-client";
 import { getUserActivitySummary, getTeamOverview } from "@/plugins/reports/actions";
+import { getPortfolioOverview } from "@/lib/portfolio";
+import { resolveWorkspaceScope } from "@/lib/workspace";
 import { ensurePluginRegistry, getPluginSettings } from "@/plugins/registry";
+
+type ReportView = "portfolio" | "bi" | "report";
 
 export default async function ReportsPage({
   searchParams,
@@ -23,9 +26,22 @@ export default async function ReportsPage({
 
   const now = new Date();
   const from = params.from ? new Date(params.from) : new Date(now.getTime() - periodDays * 86400000);
-  const to = params.to ? new Date(params.to) : now;
+  const to = params.to ? new Date(`${params.to}T23:59:59.999`) : now;
 
-  const viewMode = params.view === "bi" && isAdmin ? "bi" : "report";
+  // Every figure on this page counts only the projects in the active workspace
+  // context, so the topbar filters and the reports agree.
+  const scope = await resolveWorkspaceScope(session);
+  const scopeOpts = { projectIds: scope.focused ? scope.projectIds : undefined };
+  const scopeInfo = {
+    label: scope.label,
+    focused: scope.focused,
+    scopedCount: scope.projectIds.length,
+    visibleCount: scope.visibleCount,
+  };
+
+  const requested = params.view as ReportView | undefined;
+  const viewMode: ReportView =
+    isAdmin && (requested === "bi" || requested === "portfolio") ? requested : "report";
   const targetUserId = isAdmin && params.user ? params.user : session.id;
 
   const users = isAdmin
@@ -59,34 +75,26 @@ export default async function ReportsPage({
         avatarColor: "#6366f1",
       }];
 
-  if (viewMode === "bi") {
-    const teamData = await getTeamOverview(from, to);
-    return (
-      <ReportsClient
-        view="bi"
-        isAdmin={isAdmin}
-        users={users}
-        selectedUserId={targetUserId}
-        from={from.toISOString().slice(0, 10)}
-        to={to.toISOString().slice(0, 10)}
-        teamData={teamData}
-        includeAcademic={includeAcademic}
-      />
-    );
+  const common = {
+    isAdmin,
+    users,
+    selectedUserId: targetUserId,
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+    includeAcademic,
+    scope: scopeInfo,
+  };
+
+  if (viewMode === "portfolio") {
+    const portfolio = await getPortfolioOverview(from, to, { projectIds: scope.projectIds });
+    return <ReportsClient {...common} view="portfolio" portfolio={portfolio} />;
   }
 
-  const summary = await getUserActivitySummary(targetUserId, from, to);
+  if (viewMode === "bi") {
+    const teamData = await getTeamOverview(from, to, scopeOpts);
+    return <ReportsClient {...common} view="bi" teamData={teamData} />;
+  }
 
-  return (
-    <ReportsClient
-      view="report"
-      isAdmin={isAdmin}
-      users={users}
-      selectedUserId={targetUserId}
-      from={from.toISOString().slice(0, 10)}
-      to={to.toISOString().slice(0, 10)}
-      summary={summary}
-      includeAcademic={includeAcademic}
-    />
-  );
+  const summary = await getUserActivitySummary(targetUserId, from, to, scopeOpts);
+  return <ReportsClient {...common} view="report" summary={summary} />;
 }

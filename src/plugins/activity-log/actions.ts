@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { requirePermission } from "@/lib/rbac";
+import { resolveWorkspaceScope } from "@/lib/workspace";
 import { formatActivityRow, type ActivityLogRow } from "@/lib/activity-log/format";
 import { labelForEvent } from "@/lib/activity-log/constants";
 import type { Prisma } from "@prisma/client";
@@ -25,7 +26,10 @@ export type ActivityLogResult = {
   typeCounts: { type: string; label: string; count: number }[];
 };
 
-function buildWhere(query: ActivityLogQuery): Prisma.ActivityLogWhereInput {
+function buildWhere(
+  query: ActivityLogQuery,
+  scopeIds?: string[],
+): Prisma.ActivityLogWhereInput {
   const where: Prisma.ActivityLogWhereInput = {
     createdAt: {
       gte: new Date(query.from),
@@ -33,17 +37,29 @@ function buildWhere(query: ActivityLogQuery): Prisma.ActivityLogWhereInput {
     },
   };
   if (query.actorId) where.actorId = query.actorId;
-  if (query.projectId) where.projectId = query.projectId;
   if (query.type) where.type = query.type;
+
+  // An explicit project picker wins, but it can only narrow inside the scope:
+  // a project outside the current context matches nothing rather than leaking.
+  if (query.projectId) {
+    where.projectId =
+      scopeIds && !scopeIds.includes(query.projectId) ? { in: [] } : query.projectId;
+  } else if (scopeIds) {
+    where.projectId = { in: scopeIds };
+  }
   return where;
 }
 
 export async function queryActivityLog(query: ActivityLogQuery): Promise<ActivityLogResult> {
-  await requirePermission("activity_log:view");
+  const user = await requirePermission("activity_log:view");
+  // The timeline follows the workspace context: filtering the lab down to
+  // development projects must also drop academic events from this log.
+  const scope = await resolveWorkspaceScope(user);
+  const scopeIds = scope.focused ? scope.projectIds : undefined;
 
   const page = Math.max(1, query.page ?? 1);
   const pageSize = Math.min(100, Math.max(10, query.pageSize ?? 50));
-  const where = buildWhere(query);
+  const where = buildWhere(query, scopeIds);
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -56,7 +72,12 @@ export async function queryActivityLog(query: ActivityLogQuery): Promise<Activit
       take: pageSize,
     }),
     prisma.activityLog.count({ where }),
-    prisma.activityLog.count({ where: { createdAt: { gte: todayStart } } }),
+    prisma.activityLog.count({
+      where: {
+        createdAt: { gte: todayStart },
+        ...(scopeIds ? { projectId: { in: scopeIds } } : {}),
+      },
+    }),
     prisma.activityLog.groupBy({
       by: ["type"],
       where,
@@ -107,7 +128,8 @@ export async function queryActivityLog(query: ActivityLogQuery): Promise<Activit
 }
 
 export async function listActivityFilterOptions() {
-  await requirePermission("activity_log:view");
+  const user = await requirePermission("activity_log:view");
+  const scope = await resolveWorkspaceScope(user);
 
   const [users, projects] = await Promise.all([
     prisma.user.findMany({
@@ -116,10 +138,11 @@ export async function listActivityFilterOptions() {
       orderBy: { name: "asc" },
     }),
     prisma.project.findMany({
+      where: scope.focused ? { id: { in: scope.projectIds } } : {},
       select: { id: true, key: true, name: true },
       orderBy: { name: "asc" },
     }),
   ]);
 
-  return { users, projects };
+  return { users, projects, scope: { label: scope.label, focused: scope.focused, scopedCount: scope.projectIds.length, visibleCount: scope.visibleCount } };
 }

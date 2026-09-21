@@ -122,6 +122,28 @@ export async function hasPermission(
   return false;
 }
 
+/**
+ * Every permission key the user holds through their profiles (plus `*` for admin).
+ *
+ * An external UI cannot read the RBAC tables, so it needs the effective list up
+ * front instead of discovering each capability from a 403. Project-scoped grants
+ * (a `lead` inheriting `project_manager`) are not included here — those depend on
+ * a projectId and must still be checked per project.
+ */
+export async function listPermissionKeysForUser(user: SessionUser): Promise<string[]> {
+  if (isAdminUser(user)) {
+    const all = await prisma.permission.findMany({ select: { key: true }, orderBy: { key: "asc" } });
+    return all.map((p) => p.key);
+  }
+
+  const perms = await loadPermissions();
+  const keys = new Set<string>();
+  for (const profile of resolveProfiles(user)) {
+    for (const key of perms.get(profile) ?? []) keys.add(key);
+  }
+  return [...keys].sort();
+}
+
 /** Redirects to / if the user lacks the given permission (throws in API context). */
 export async function requirePermission(
   permissionKey: string,

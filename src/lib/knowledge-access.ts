@@ -100,21 +100,51 @@ export async function articleVisibilityWhere(user: SessionUser) {
   return { AND: [base, adminExclude] };
 }
 
-/** Remove RAG hits from admin-only or out-of-scope articles. */
+/** Remove RAG hits the user may not read: admin-only or out-of-scope articles,
+ *  and repository deposits that are unpublished, admin-only or not theirs. */
 export async function filterRagHitsForUser(hits: SearchHit[], user: SessionUser | null): Promise<SearchHit[]> {
   const articleIds = [...new Set(hits.filter((h) => h.sourceType === "article").map((h) => h.sourceId))];
-  if (articleIds.length === 0) return hits;
+  const recordIds = [
+    ...new Set(hits.filter((h) => h.sourceType === "repository_record").map((h) => h.sourceId)),
+  ];
+  if (articleIds.length === 0 && recordIds.length === 0) return hits;
 
-  const articles = await prisma.knowledgeArticle.findMany({
-    where: { id: { in: articleIds } },
-    select: { id: true, externalPath: true, externalFolder: true, projectId: true },
-  });
+  const [articles, records] = await Promise.all([
+    articleIds.length
+      ? prisma.knowledgeArticle.findMany({
+          where: { id: { in: articleIds } },
+          select: { id: true, externalPath: true, externalFolder: true, projectId: true },
+        })
+      : Promise.resolve([]),
+    recordIds.length
+      ? prisma.repositoryRecord.findMany({
+          where: { id: { in: recordIds } },
+          select: { id: true, status: true, visibility: true, submitterId: true, projectId: true },
+        })
+      : Promise.resolve([]),
+  ]);
   const byId = new Map(articles.map((a) => [a.id, a]));
+  const recordById = new Map(records.map((r) => [r.id, r]));
   const adminFolders = getAdminOnlyFolders();
   const viewable = user ? await viewableProjectIds(user) : [];
   const isAdmin = user ? isKnowledgeAdmin(user) : false;
+  const canManageRepo =
+    user && recordIds.length > 0
+      ? isAdmin || (await hasPermission(user, "repository:manage"))
+      : false;
 
   return hits.filter((h) => {
+    if (h.sourceType === "repository_record") {
+      // No session means no repository context at all: deposits are never public.
+      if (!user) return false;
+      const record = recordById.get(h.sourceId);
+      if (!record) return false;
+      if (canManageRepo) return true;
+      if (record.visibility === "admin") return false;
+      if (record.status !== "published" && record.submitterId !== user.id) return false;
+      if (record.projectId && !viewable.includes(record.projectId)) return false;
+      return true;
+    }
     if (h.sourceType !== "article") {
       if (!user) return true;
       if (!h.projectId) return true;

@@ -1,6 +1,6 @@
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
-import { workspaceProjectIds, findMyThesisProject } from "@/lib/workspace";
+import { resolveWorkspaceScope, findMyThesisProject } from "@/lib/workspace";
 import { ProjectsListClient } from "@/components/projects/projects-list-client";
 
 export default async function ProjectsPage({
@@ -10,7 +10,8 @@ export default async function ProjectsPage({
 }) {
   const session = await requireUser();
   const { kind } = await searchParams;
-  const ids = await workspaceProjectIds(session);
+  const scope = await resolveWorkspaceScope(session);
+  const ids = scope.projectIds;
   const [projects, myThesis] = await Promise.all([
     prisma.project.findMany({
       where: { id: { in: ids } },
@@ -25,6 +26,12 @@ export default async function ProjectsPage({
   return (
     <ProjectsListClient
       initialKindFilter={kind ?? "all"}
+      scope={{
+        label: scope.label,
+        focused: scope.focused,
+        scopedCount: ids.length,
+        visibleCount: scope.visibleCount,
+      }}
       myThesisId={myThesis?.id ?? null}
       projects={projects.map((p) => ({
         id: p.id,

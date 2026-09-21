@@ -64,7 +64,11 @@ export function defaultWeeklyPeriod(now = new Date()): { from: Date; to: Date } 
   return { from, to };
 }
 
-async function loadTeamOverview(from: Date, to: Date): Promise<WeeklyTeamMember[]> {
+async function loadTeamOverview(
+  from: Date,
+  to: Date,
+  projectFilter?: { in: string[] },
+): Promise<WeeklyTeamMember[]> {
   const users = await prisma.user.findMany({
     where: { accountStatus: "active" },
     select: {
@@ -80,17 +84,27 @@ async function loadTeamOverview(from: Date, to: Date): Promise<WeeklyTeamMember[
   const [eventCounts, lastEvents, taskStats] = await Promise.all([
     prisma.activityLog.groupBy({
       by: ["actorId"],
-      where: { createdAt: { gte: from, lte: to }, actorId: { not: null } },
+      where: {
+        createdAt: { gte: from, lte: to },
+        actorId: { not: null },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       _count: true,
     }),
     prisma.activityLog.findMany({
-      where: { actorId: { in: users.map((u) => u.id) } },
+      where: {
+        actorId: { in: users.map((u) => u.id) },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       orderBy: { createdAt: "desc" },
       distinct: ["actorId"],
       select: { actorId: true, createdAt: true },
     }),
     prisma.task.findMany({
-      where: { assignees: { some: { id: { in: users.map((u) => u.id) } } } },
+      where: {
+        assignees: { some: { id: { in: users.map((u) => u.id) } } },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       select: { id: true, status: true, updatedAt: true, assignees: { select: { id: true } } },
     }),
   ]);
@@ -129,25 +143,34 @@ async function loadTeamOverview(from: Date, to: Date): Promise<WeeklyTeamMember[
   });
 }
 
+/**
+ * `opts.projectIds` narrows the whole report to a project set (the caller's
+ * workspace scope). Without it the report covers the entire lab, which is the
+ * right default for the scheduled admin email.
+ */
 export async function collectWeeklyLabReportData(
   from: Date,
   to: Date,
+  opts: { projectIds?: string[] } = {},
 ): Promise<WeeklyLabReportData> {
   const now = new Date();
   const stuckBefore = new Date(now.getTime() - STUCK_DAYS * 86400000);
+  const projectFilter = opts.projectIds ? { in: opts.projectIds } : undefined;
+  const scoped = projectFilter ? { projectId: projectFilter } : {};
 
   const [team, events, overdueTasks, stuckTasks, overdueDeliverables, openFeedback, projects, academicProfiles] =
     await Promise.all([
-      loadTeamOverview(from, to),
+      loadTeamOverview(from, to, projectFilter),
       prisma.activityLog.groupBy({
         by: ["type"],
-        where: { createdAt: { gte: from, lte: to } },
+        where: { createdAt: { gte: from, lte: to }, ...scoped },
         _count: true,
       }),
       prisma.task.findMany({
         where: {
           status: { not: "done" },
           dueDate: { lt: now },
+          ...scoped,
         },
         include: {
           project: { select: { key: true } },
@@ -160,6 +183,7 @@ export async function collectWeeklyLabReportData(
         where: {
           status: { in: ["in_progress", "review"] },
           updatedAt: { lt: stuckBefore },
+          ...scoped,
         },
         include: {
           project: { select: { key: true } },
@@ -172,13 +196,14 @@ export async function collectWeeklyLabReportData(
         where: {
           status: { notIn: ["accepted", "rejected"] },
           dueDate: { lt: now },
+          ...scoped,
         },
         include: { project: { select: { key: true } } },
         orderBy: { dueDate: "asc" },
         take: 30,
       }),
       prisma.feedback.findMany({
-        where: { status: { in: ["open", "triaged", "in_progress"] } },
+        where: { status: { in: ["open", "triaged", "in_progress"] }, ...scoped },
         include: {
           assignee: { select: { name: true } },
           project: { select: { key: true } },
@@ -187,7 +212,10 @@ export async function collectWeeklyLabReportData(
         take: 20,
       }),
       prisma.project.findMany({
-        where: { status: { not: "archived" } },
+        where: {
+          status: { not: "archived" },
+          ...(projectFilter ? { id: projectFilter } : {}),
+        },
         select: {
           id: true,
           key: true,

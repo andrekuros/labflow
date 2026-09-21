@@ -5,6 +5,8 @@ import { emit } from "@/lib/events";
 import { requirePermission, requireUser, hasPermission } from "@/lib/rbac";
 import { formatProfilesLabel, legacyRoleToProfiles, normalizeProfiles } from "@/lib/profile-meta";
 import { labelForEvent } from "@/lib/activity-log/constants";
+import { resolveWorkspaceScope } from "@/lib/workspace";
+import type { PortfolioOverview } from "@/lib/portfolio";
 
 export type UserActivitySummary = {
   user: { id: string; name: string; email: string; role: string; profilesLabel: string };
@@ -13,6 +15,7 @@ export type UserActivitySummary = {
     tasksCreated: number;
     tasksCompleted: number;
     tasksInProgress: number;
+    tasksOverdue: number;
     deliverablesSubmitted: number;
     deliverablesAccepted: number;
     requirementsCreated: number;
@@ -46,16 +49,29 @@ export type TeamMemberOverview = {
   avatarColor: string;
   tasksCompleted: number;
   tasksTotal: number;
+  tasksOpen: number;
+  tasksOverdue: number;
   deliverablesAccepted: number;
   totalEvents: number;
   lastEventAt: string | null;
 };
 
+/**
+ * Individual activity report.
+ *
+ * `opts.projectIds` is the resolved workspace scope: when present, every figure
+ * counts only those projects. Activity rows with no project (account events and
+ * the like) are not project work and stay out of a scoped report.
+ */
 export async function getUserActivitySummary(
   userId: string,
   from: Date,
   to: Date,
+  opts: { projectIds?: string[] } = {},
 ): Promise<UserActivitySummary> {
+  const scope = opts.projectIds;
+  const projectFilter = scope ? { in: scope } : undefined;
+  const now = new Date();
   const user = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
     select: { id: true, name: true, email: true, role: true, profiles: { select: { profile: true } } },
@@ -73,17 +89,29 @@ export async function getUserActivitySummary(
 
   const [events, tasks, deliverables, academicProfile] = await Promise.all([
     prisma.activityLog.findMany({
-      where: { actorId: userId, createdAt: { gte: from, lte: to } },
+      where: {
+        actorId: userId,
+        createdAt: { gte: from, lte: to },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       orderBy: { createdAt: "desc" },
     }),
+    // Tasks that matter for a period report: what moved inside it, plus what is
+    // still open. The previous version pulled every task ever assigned, so the
+    // date range had no effect on this section at all.
     prisma.task.findMany({
-      where: { assignees: { some: { id: userId } } },
+      where: {
+        assignees: { some: { id: userId } },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+        OR: [{ updatedAt: { gte: from, lte: to } }, { status: { not: "done" } }],
+      },
       include: { project: true, sprint: true },
       orderBy: { updatedAt: "desc" },
     }),
     prisma.deliverable.findMany({
       where: {
         project: { memberships: { some: { userId } } },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
         updatedAt: { gte: from, lte: to },
       },
       include: { project: true },
@@ -109,11 +137,13 @@ export async function getUserActivitySummary(
     (t) => t.status === "done" && t.updatedAt >= from && t.updatedAt <= to,
   );
   const inProgress = tasks.filter((t) => t.status === "in_progress" || t.status === "review");
+  const overdue = tasks.filter((t) => t.status !== "done" && t.dueDate && t.dueDate < now);
 
   const kpis = {
     tasksCreated: countType("task.created"),
     tasksCompleted: completedInPeriod.length,
     tasksInProgress: inProgress.length,
+    tasksOverdue: overdue.length,
     deliverablesSubmitted: countType("deliverable.created") + countType("deliverable.updated"),
     deliverablesAccepted: deliverables.filter((d) => d.status === "accepted").length,
     requirementsCreated: countType("requirement.created"),
@@ -191,7 +221,14 @@ export async function getUserActivitySummary(
   };
 }
 
-export async function getTeamOverview(from: Date, to: Date): Promise<TeamMemberOverview[]> {
+export async function getTeamOverview(
+  from: Date,
+  to: Date,
+  opts: { projectIds?: string[] } = {},
+): Promise<TeamMemberOverview[]> {
+  const scope = opts.projectIds;
+  const projectFilter = scope ? { in: scope } : undefined;
+  const now = new Date();
   const users = await prisma.user.findMany({
     where: { accountStatus: "active" },
     select: {
@@ -204,41 +241,82 @@ export async function getTeamOverview(from: Date, to: Date): Promise<TeamMemberO
     orderBy: { name: "asc" },
   });
 
-  const [eventCounts, lastEvents, taskStats] = await Promise.all([
+  const userIds = users.map((u) => u.id);
+
+  const [eventCounts, lastEvents, taskStats, acceptedDeliverables] = await Promise.all([
     prisma.activityLog.groupBy({
       by: ["actorId"],
-      where: { createdAt: { gte: from, lte: to }, actorId: { not: null } },
+      where: {
+        createdAt: { gte: from, lte: to },
+        actorId: { not: null },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       _count: true,
     }),
     prisma.activityLog.findMany({
-      where: { actorId: { in: users.map((u) => u.id) } },
+      where: {
+        actorId: { in: userIds },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
       orderBy: { createdAt: "desc" },
       distinct: ["actorId"],
       select: { actorId: true, createdAt: true },
     }),
     prisma.task.findMany({
-      where: { assignees: { some: { id: { in: users.map((u) => u.id) } } } },
-      select: { id: true, status: true, updatedAt: true, assignees: { select: { id: true } } },
+      where: {
+        assignees: { some: { id: { in: userIds } } },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
+      select: {
+        id: true,
+        status: true,
+        dueDate: true,
+        updatedAt: true,
+        assignees: { select: { id: true } },
+      },
+    }),
+    // Deliverables accepted in the period, per project member. Replaces the
+    // hardcoded `deliverablesAccepted: 0` that made the column dead weight.
+    prisma.deliverable.findMany({
+      where: {
+        status: "accepted",
+        updatedAt: { gte: from, lte: to },
+        ...(projectFilter ? { projectId: projectFilter } : {}),
+      },
+      select: { id: true, project: { select: { memberships: { select: { userId: true } } } } },
     }),
   ]);
 
   const eventCountMap = new Map(eventCounts.map((e) => [e.actorId, e._count]));
   const lastEventMap = new Map(lastEvents.map((e) => [e.actorId, e.createdAt.toISOString()]));
 
-  const tasksByUser = new Map<string, { total: number; completed: number; accepted: number }>();
+  const tasksByUser = new Map<
+    string,
+    { total: number; completed: number; open: number; overdue: number }
+  >();
   taskStats.forEach((t) => {
     t.assignees.forEach((a) => {
-      const cur = tasksByUser.get(a.id) ?? { total: 0, completed: 0, accepted: 0 };
+      const cur = tasksByUser.get(a.id) ?? { total: 0, completed: 0, open: 0, overdue: 0 };
       cur.total += 1;
-      if (t.status === "done" && t.updatedAt >= from && t.updatedAt <= to) {
-        cur.completed += 1;
+      if (t.status === "done") {
+        if (t.updatedAt >= from && t.updatedAt <= to) cur.completed += 1;
+      } else {
+        cur.open += 1;
+        if (t.dueDate && t.dueDate < now) cur.overdue += 1;
       }
       tasksByUser.set(a.id, cur);
     });
   });
 
+  const acceptedByUser = new Map<string, number>();
+  for (const d of acceptedDeliverables) {
+    for (const m of d.project.memberships) {
+      acceptedByUser.set(m.userId, (acceptedByUser.get(m.userId) ?? 0) + 1);
+    }
+  }
+
   return users.map((u) => {
-    const ts = tasksByUser.get(u.id) ?? { total: 0, completed: 0, accepted: 0 };
+    const ts = tasksByUser.get(u.id) ?? { total: 0, completed: 0, open: 0, overdue: 0 };
     const profiles = u.profiles.length
       ? normalizeProfiles(u.profiles.map((p) => p.profile))
       : legacyRoleToProfiles(u.role);
@@ -250,11 +328,40 @@ export async function getTeamOverview(from: Date, to: Date): Promise<TeamMemberO
       avatarColor: u.avatarColor,
       tasksCompleted: ts.completed,
       tasksTotal: ts.total,
-      deliverablesAccepted: 0,
+      tasksOpen: ts.open,
+      tasksOverdue: ts.overdue,
+      deliverablesAccepted: acceptedByUser.get(u.id) ?? 0,
       totalEvents: eventCountMap.get(u.id) ?? 0,
       lastEventAt: lastEventMap.get(u.id) ?? null,
     };
   });
+}
+
+/**
+ * Portfolio BI for whoever follows projects rather than people.
+ * Always scoped by the caller's workspace context.
+ */
+export async function getPortfolioReport(options: {
+  from: string;
+  to: string;
+}): Promise<{ ok: true; data: PortfolioOverview } | { ok: false; error: string }> {
+  try {
+    const user = await requireUser();
+    const canAll = await hasPermission(user, "report:view_all");
+    const canView = await hasPermission(user, "report:view");
+    if (!canAll && !canView) return { ok: false, error: "Sem permissao" };
+
+    const scope = await resolveWorkspaceScope(user);
+    const { getPortfolioOverview } = await import("@/lib/portfolio");
+    const data = await getPortfolioOverview(
+      new Date(options.from),
+      new Date(`${options.to}T23:59:59.999`),
+      { projectIds: scope.projectIds },
+    );
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Falha ao carregar portfolio" };
+  }
 }
 
 export async function generateWeeklyReportNow(options?: {
@@ -278,8 +385,12 @@ export async function generateWeeklyReportNow(options?: {
   const { runWeeklyLabReport } = await import("@/plugins/reports/weekly/run");
   const format = options?.format ?? "both";
   const sendEmail = options?.sendEmail === true;
+  // Manual runs follow the workspace filter the person is looking at; the
+  // scheduled email keeps covering the whole lab.
+  const scope = await resolveWorkspaceScope(user);
   return runWeeklyLabReport({
     actorId: user.id,
+    projectIds: scope.focused ? scope.projectIds : undefined,
     sendEmail,
     includePdfBase64: format === "pdf" || format === "both" || sendEmail,
     includeMarkdown: format === "markdown" || format === "both",
@@ -362,7 +473,10 @@ export async function exportLabPresentation(options: {
     const { generateLabPresentationPdf } = await import("@/plugins/reports/presentation-pdf");
     const { getLabBranding } = await import("@/lib/lab-branding");
 
-    const data = await collectWeeklyLabReportData(from, to);
+    const scope = await resolveWorkspaceScope(user);
+    const data = await collectWeeklyLabReportData(from, to, {
+      projectIds: scope.focused ? scope.projectIds : undefined,
+    });
     const narrative = await generateWeeklyNarrative(
       data,
       options.aiSections?.length

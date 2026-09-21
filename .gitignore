@@ -27,3 +27,6 @@ npm-debug.log*
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+# Repository bitstreams (local storage)
+storage/

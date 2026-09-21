@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card, Badge, PageHeader, EmptyState, Select } from "@/components/ui";
 import { NewProjectButton } from "@/components/projects/project-forms";
 import { PROJECT_KIND_LABELS, PROJECT_KINDS, type ProjectKind, isProjectKind } from "@/lib/projects/features";
+import { WorkspaceScopeBar } from "@/components/workspace-scope-bar";
 
 export type ProjectListRow = {
   id: string;
@@ -33,10 +34,12 @@ export function ProjectsListClient({
   projects,
   initialKindFilter = "all",
   myThesisId,
+  scope,
 }: {
   projects: ProjectListRow[];
   initialKindFilter?: string;
   myThesisId?: string | null;
+  scope?: { label: string; focused: boolean; scopedCount: number; visibleCount: number };
 }) {
   const [filter, setFilter] = useState(
     KIND_FILTERS.some((f) => f.id === initialKindFilter) ? initialKindFilter : "all",
@@ -56,6 +59,15 @@ export function ProjectsListClient({
         description="Lab, admin, teses, dissertacoes e artigos — um so lugar de trabalho."
         actions={<NewProjectButton />}
       />
+
+      {scope && (
+        <WorkspaceScopeBar
+          label={scope.label}
+          scopedCount={scope.scopedCount}
+          visibleCount={scope.visibleCount}
+          focused={scope.focused}
+        />
+      )}
 
       {myThesisId && (
         <Link

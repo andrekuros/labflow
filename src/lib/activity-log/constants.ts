@@ -22,6 +22,10 @@ export const EVENT_LABELS: Record<string, string> = {
   "feedback.submitted": "Feedback enviado",
   "sprint.created": "Sprint criada",
   "report.weekly_sent": "Relatorio semanal enviado",
+  "repository.record_created": "Deposito criado no repositorio",
+  "repository.record_updated": "Deposito atualizado no repositorio",
+  "repository.record_published": "Deposito publicado no repositorio",
+  "repository.record_deleted": "Deposito removido do repositorio",
 };
 
 export const EVENT_TYPES = Object.keys(EVENT_LABELS) as DomainEventType[];
@@ -42,6 +46,15 @@ export const EVENT_GROUPS: { label: string; types: DomainEventType[] }[] = [
   {
     label: "Conhecimento",
     types: ["article.created", "article.updated", "article.deleted"],
+  },
+  {
+    label: "Repositorio",
+    types: [
+      "repository.record_created",
+      "repository.record_updated",
+      "repository.record_published",
+      "repository.record_deleted",
+    ],
   },
   {
     label: "Forum",

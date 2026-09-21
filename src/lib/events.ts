@@ -22,6 +22,7 @@ export type DomainEventType =
   | "article.deleted"
   | "thread.created"
   | "post.created"
+  | "comment.created"
   | "project.created"
   | "project.updated"
   | "user.created"
@@ -31,7 +32,11 @@ export type DomainEventType =
   | "publication.updated"
   | "feedback.submitted"
   | "sprint.created"
-  | "report.weekly_sent";
+  | "report.weekly_sent"
+  | "repository.record_created"
+  | "repository.record_updated"
+  | "repository.record_published"
+  | "repository.record_deleted";
 
 export type DomainEvent = {
   type: DomainEventType;
