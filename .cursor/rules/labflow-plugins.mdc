@@ -55,6 +55,6 @@ export async function createThing(input: ...) {
 
 Chave: `"METHOD path"` ou `"METHOD path/:param"` (barra inicial opcional; registry normaliza). Exemplo: `"GET reports"`, `"POST items"`, `"PATCH items/:id"`.
 
-Auth da API: Bearer `lf_...` / JWT apenas. Preferir chamar server actions via `runApiAction` (usuario injetado por `runWithApiUser`).
+Auth da API (`src/plugins/api-auth.ts`), nesta ordem: Bearer `lf_...` -> Bearer JWT -> cookie de sessao do browser (links do catalogo / fetch same-origin). Preferir chamar server actions via `runApiAction` (usuario injetado por `runWithApiUser`).
 
 Catalogo: `GET /api/v1`. Referência: `src/plugins/board/api.ts`, `src/plugins/knowledge/api.ts`.

@@ -62,6 +62,7 @@ export default async function ActivityLogPage({
       users={filters.users}
       projects={filters.projects}
       eventGroups={EVENT_GROUPS}
+      scope={filters.scope}
     />
   );
 }

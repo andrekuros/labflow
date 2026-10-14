@@ -7,6 +7,7 @@ import { Calendar, ChevronLeft, ChevronRight, Activity, Users, Filter } from "lu
 import type { ActivityLogRow } from "@/lib/activity-log/format";
 import { labelForEvent } from "@/lib/activity-log/constants";
 import type { DomainEventType } from "@/lib/events";
+import { WorkspaceScopeBar } from "@/components/workspace-scope-bar";
 
 type UserOption = { id: string; name: string };
 type ProjectOption = { id: string; key: string; name: string };
@@ -28,6 +29,7 @@ type Props = {
   users: UserOption[];
   projects: ProjectOption[];
   eventGroups: EventGroup[];
+  scope: { label: string; focused: boolean; scopedCount: number; visibleCount: number };
 };
 
 const PRESETS = [
@@ -62,6 +64,7 @@ export function ActivityLogClient({
   users,
   projects,
   eventGroups,
+  scope,
 }: Props) {
   const router = useRouter();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -102,6 +105,13 @@ export function ActivityLogClient({
       <PageHeader
         title="Registro de atividades"
         description="Timeline global de acoes no laboratorio — visivel apenas para administradores."
+      />
+
+      <WorkspaceScopeBar
+        label={scope.label}
+        scopedCount={scope.scopedCount}
+        visibleCount={scope.visibleCount}
+        focused={scope.focused}
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">

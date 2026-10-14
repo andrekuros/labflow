@@ -45,6 +45,11 @@ export async function runWeeklyLabReport(options?: {
   from?: Date;
   to?: Date;
   aiSections?: AiAnalysisSection[];
+  /**
+   * Restrict the report to these projects. The UI passes the caller's workspace
+   * scope; the scheduled admin email passes nothing and stays lab-wide.
+   */
+  projectIds?: string[];
 }): Promise<WeeklyReportRunResult> {
   const sendEmail = options?.sendEmail === true;
   const format = options?.format ?? (sendEmail ? "both" : "both");
@@ -57,7 +62,9 @@ export async function runWeeklyLabReport(options?: {
   const aiSections = normalizeAiSections(options?.aiSections);
 
   try {
-    const data = await collectWeeklyLabReportData(from, to);
+    const data = await collectWeeklyLabReportData(from, to, {
+      projectIds: options?.projectIds,
+    });
     const narrative = await generateWeeklyNarrative(
       data,
       aiSections.length

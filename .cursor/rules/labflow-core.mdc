@@ -5,7 +5,8 @@ alwaysApply: true
 
 # LabFlow — Core
 
-Plataforma Next.js 15 + Prisma + plugins. Leia `AGENTS.md` para mapa completo.
+Plataforma Next.js 15 + Prisma + plugins. Leia `AGENTS.md` para o mapa completo e
+`docs/ARCHITECTURE.md` para diagramas de camadas, request e modelo de dados.
 
 ## Princípios
 

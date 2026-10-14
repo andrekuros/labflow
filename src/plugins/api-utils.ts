@@ -8,8 +8,18 @@ export function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, error: message }, { status });
 }
 
+/**
+ * Parse a JSON request body, if that is what was sent.
+ *
+ * The content-type check matters: calling `request.json()` on a multipart upload
+ * consumes the stream even when the parse fails, so a handler that wanted
+ * `request.formData()` would receive an empty body. File uploads reach their
+ * handler intact because of this guard.
+ */
 export async function readJsonBody<T = unknown>(request: Request): Promise<T | undefined> {
   if (request.method === "GET" || request.method === "HEAD") return undefined;
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType && !contentType.includes("json")) return undefined;
   try {
     return (await request.json()) as T;
   } catch {

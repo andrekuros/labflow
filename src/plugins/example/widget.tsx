@@ -2,7 +2,12 @@ import { Sparkles } from "lucide-react";
 import { listAiTools } from "@/plugins/registry";
 
 /**
- * Example UI contribution rendered into the "dashboard.widgets" slot.
+ * Reference implementation of a `dashboard.widgets` UI contribution.
+ *
+ * NOT registered by default: it renders the list of registered AI tool names,
+ * which is useful while developing a plugin and pure noise on a real lab's
+ * dashboard. See the note in `./index.ts` for how to mount it.
+ *
  * Server component (no client hooks) so it renders anywhere a slot is mounted.
  */
 export function ExampleWidget() {

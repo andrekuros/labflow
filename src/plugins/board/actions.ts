@@ -189,6 +189,15 @@ export async function addComment(taskId: string, content: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) throw new Error("Tarefa nao encontrada");
   const c = await prisma.comment.create({ data: { taskId, authorId: session.id, content } });
+  // Task discussion is where decisions actually get recorded; without this the
+  // assistant never sees any of it.
+  await emit({
+    type: "comment.created",
+    actorId: session.id,
+    projectId: task.projectId,
+    targetId: c.id,
+    payload: { id: c.id, taskId, title: task.title, content },
+  });
   revalidatePath("/board");
   return c;
 }

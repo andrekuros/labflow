@@ -23,6 +23,7 @@ export function bootstrap() {
   on("article.updated", (e) => ingestArticleFromEvent(e));
   on("article.deleted", (e) => purgeArticleFromEvent(e));
   on("post.created", (e) => ingestFromEvent("post", e));
+  on("comment.created", (e) => ingestFromEvent("comment", e));
   on("thread.created", (e) => ingestFromEvent("post", e));
   on("task.created", (e) => ingestFromEvent("task", e));
   on("task.updated", (e) => void indexTaskFromEvent(e));
@@ -39,6 +40,10 @@ export function bootstrap() {
   on("user.updated", (e) => void indexUserFromEvent(e));
   on("academic.updated", (e) => void indexAcademicFromEvent(e));
   on("feedback.submitted", (e) => void processFeedbackFromEvent(e));
+  on("repository.record_created", (e) => void indexRecordFromEvent(e));
+  on("repository.record_updated", (e) => void indexRecordFromEvent(e));
+  on("repository.record_published", (e) => void indexRecordFromEvent(e));
+  on("repository.record_deleted", (e) => void purgeRecordFromEvent(e));
 
   registerBuiltinPlugins();
 }
@@ -137,6 +142,27 @@ async function ensureVaultFromProjectEvent(event: { projectId?: string | null; p
     await ensureProjectVaultFromId(id);
   } catch (err) {
     console.error("[knowledge] ensure project vault failed", err);
+  }
+}
+
+/** Repository deposits are indexed on every metadata or file change. */
+async function indexRecordFromEvent(event: { targetId?: string | null }) {
+  if (!event.targetId) return;
+  try {
+    const { indexRepositoryRecord } = await import("@/lib/repository/indexer");
+    await indexRepositoryRecord(event.targetId);
+  } catch (err) {
+    console.error("[bootstrap] falha ao indexar deposito do repositorio", err);
+  }
+}
+
+async function purgeRecordFromEvent(event: { targetId?: string | null }) {
+  if (!event.targetId) return;
+  try {
+    const { purgeRepositoryRecord } = await import("@/lib/repository/indexer");
+    await purgeRepositoryRecord(event.targetId);
+  } catch (err) {
+    console.error("[bootstrap] falha ao remover deposito do indice", err);
   }
 }
 

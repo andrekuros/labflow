@@ -7,7 +7,7 @@
 
 export const LOCAL_DIM = 256;
 
-function tokenize(text: string): string[] {
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .normalize("NFD")
@@ -44,6 +44,32 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
   return dot;
+}
+
+/**
+ * Lexical overlap between a tokenized query and a chunk, in [0, 1].
+ *
+ * Blended with cosine similarity so that exact terms a lab relies on --
+ * requirement codes, project keys, instrument and people names -- still rank,
+ * even when the embedding model has no useful representation for them.
+ */
+export function lexicalScore(queryTokens: string[], chunk: string): number {
+  if (queryTokens.length === 0) return 0;
+  const haystack = new Set(tokenize(chunk));
+  if (haystack.size === 0) return 0;
+
+  let matched = 0;
+  for (const token of new Set(queryTokens)) {
+    if (haystack.has(token)) matched++;
+  }
+  const unique = new Set(queryTokens).size;
+  const overlap = matched / unique;
+
+  // Reward a verbatim multi-word match: strong evidence the chunk is on topic.
+  const phrase = queryTokens.join(" ");
+  const exact = phrase.length > 8 && chunk.toLowerCase().includes(phrase) ? 0.25 : 0;
+
+  return Math.min(1, overlap + exact);
 }
 
 export function chunkText(text: string, size = 600, overlap = 100): string[] {

@@ -122,9 +122,26 @@ Visao unificada por projeto: requisitos, entregaveis, roadmap e sprints.
 Plugin: \`src/plugins/planning/\`. Depende de \`projects\`.
 
 ## Relatorios (\`/reports\`)
-Relatorios de atividade por usuario/periodo e painel BI para admins.
+Tres abas: **Portfolio** (uma linha por projeto, com saude, atrasos e throughput),
+**Equipe** (produtividade por pessoa) e **Individual** (relatorio de atividade).
 Permissoes: \`report:view\`, \`report:view_all\`, \`report:export\`.
-Plugin: \`src/plugins/reports/\`.
+Plugin: \`src/plugins/reports/\`; dados do portfolio em \`src/lib/portfolio.ts\`.
+
+## Gantt (\`/gantt\`)
+Cronograma consolidado: projeto > pacote de trabalho > sprint/tarefa/marco/entregavel.
+Somente leitura. Datas de pacote e projeto sao **agregadas dos filhos**; tarefa com
+apenas prazo recebe inicio inferido e barra hachurada. O que nao tem data alguma
+aparece no aviso "itens sem data", nunca inventado no grafico.
+Plugin: \`src/plugins/gantt/\`; dados em \`src/lib/gantt.ts\`.
+
+## Repositorio (\`/repository\`)
+Repositorio institucional estilo DSpace/Invenio, **separado da Biblioteca**:
+colecoes hierarquicas, metadados bibliograficos, handle citavel
+(\`labflow/<ano>/<sequencial>\`), versoes, busca facetada e perguntas por IA.
+Arquivos ficam em disco local (\`REPOSITORY_STORAGE_DIR\`, padrao \`./storage/repository\`),
+sem depender do Nextcloud.
+Permissoes: \`repository:view|create|edit|delete|manage\`.
+Plugin: \`src/plugins/repository/\`; libs em \`src/lib/repository/\`.
 
 ## Conhecimento — Links e Nextcloud
 - \`KnowledgeLink\`: vincula artigos a tasks, deliverables, requirements
@@ -244,15 +261,47 @@ Base URL: \`/api/v1\`
 
 ## Autenticacao
 
-Todas as rotas exigem o header:
+Tres formas, nesta ordem de preferencia:
 
 \`\`\`
-Authorization: Bearer lf_...
+Authorization: Bearer lf_...        # chave de API (Configuracoes > Integracoes)
+Authorization: Bearer <JWT>         # POST /api/v1/auth/token
+Cookie: labflow_session=...         # sessao do navegador, apenas same-origin
 \`\`\`
 
-Gere a chave em **Configuracoes > Integracoes** (apenas admin). JWT Bearer tambem e aceito.
-Se voce estiver logado no LabFlow, abrir \`/api/v1\` no navegador tambem funciona (cookie de sessao).
-Integracoes externas devem usar a chave \`lf_...\`.
+### Token para UI externa
+
+\`\`\`bash
+curl -X POST http://localhost:3000/api/v1/auth/token \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"voce@lab.edu","password":"sua-senha","ttlHours":12}'
+\`\`\`
+
+Devolve \`{ token, expiresAt, user }\`. O token carrega exatamente as permissoes da
+pessoa — nada mais.
+
+### Quem sou eu
+
+\`GET /api/v1/me\` devolve identidade, **lista de permissoes efetivas**, itens de
+navegacao (com os mesmos filtros da sidebar) e o contexto de trabalho ativo.
+Uma UI externa precisa disso no boot: ela nao le as tabelas de RBAC.
+
+### CORS
+
+Por padrao **nenhuma origem externa** e liberada. Configure no \`.env\`:
+
+\`\`\`
+API_CORS_ORIGINS="https://minha-ui.exemplo,http://localhost:5173"
+\`\`\`
+
+Com \`*\` qualquer origem passa, mas o cookie de sessao deixa de ser aceito
+(regra do proprio fetch) — use token nesse caso.
+
+### OpenAPI
+
+\`GET /api/v1/openapi.json\` gera um documento OpenAPI 3.1 a partir das rotas
+registradas em runtime. Caminhos, metodos e parametros de path sao reais; os
+corpos estao descritos de forma generica, porque os handlers nao declaram schema.
 
 ## Catalogo automatico
 
@@ -266,8 +315,23 @@ Resposta: lista de plugins habilitados e rotas \`method\` + \`url\` registradas 
 
 - Sucesso: \`{ "ok": true, "data": ... }\`
 - Erro: \`{ "ok": false, "error": "mensagem" }\` (401/403/404/400)
+- Download de arquivo: **bytes crus**, sem envelope (com \`X-Checksum-Sha256\`)
+
+Paginacao, onde existe: \`?page=1&pageSize=20\` e \`{ total, page, pageSize }\` na
+resposta. Endpoints sem esses campos devolvem a colecao inteira.
 
 Permissoes RBAC sao as mesmas da UI (\`modulo:acao\`).
+
+## Upload de arquivos
+
+\`POST /api/v1/repository/records/<id>/files\` aceita \`multipart/form-data\` com o
+campo \`file\` repetivel:
+
+\`\`\`bash
+curl -X POST http://localhost:3000/api/v1/repository/records/<id>/files \\
+  -H "Authorization: Bearer $TOKEN" \\
+  -F "file=@artigo.pdf" -F "file=@dados.csv"
+\`\`\`
 
 ## Exemplos
 

@@ -23,6 +23,8 @@ import {
   BarChart3,
   FileText,
   ScrollText,
+  GanttChartSquare,
+  Library,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +51,8 @@ const ICONS: Record<string, LucideIcon> = {
   BarChart3,
   FileText,
   ScrollText,
+  GanttChartSquare,
+  Library,
 };
 
 export function getNavIcon(name: string): LucideIcon {

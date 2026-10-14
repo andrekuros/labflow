@@ -20,24 +20,39 @@ import {
   Loader2,
   Sparkles,
   Presentation,
+  AlertTriangle,
+  LayoutDashboard,
+  PackageCheck,
 } from "lucide-react";
 import type { UserActivitySummary, TeamMemberOverview } from "@/plugins/reports/actions";
 import { exportActivityReport, generateWeeklyReportNow, exportLabPresentation } from "@/plugins/reports/actions";
 import { generateReportMarkdown } from "@/plugins/reports/report-markdown";
 import { AI_SECTION_OPTIONS, type AiAnalysisSection } from "@/plugins/reports/ai-sections";
+import type { PortfolioOverview } from "@/lib/portfolio-types";
+import { PortfolioDashboard } from "@/components/reports/portfolio-dashboard";
+import { WorkspaceScopeBar } from "@/components/workspace-scope-bar";
 
 type UserOption = { id: string; name: string; role: string; profilesLabel: string; avatarColor: string };
 
+export type ReportsScopeInfo = {
+  label: string;
+  focused: boolean;
+  scopedCount: number;
+  visibleCount: number;
+};
+
 type Props = {
-  view: "report" | "bi";
+  view: "report" | "bi" | "portfolio";
   isAdmin: boolean;
   users: UserOption[];
   selectedUserId: string;
   from: string;
   to: string;
   includeAcademic: boolean;
+  scope: ReportsScopeInfo;
   summary?: UserActivitySummary;
   teamData?: TeamMemberOverview[];
+  portfolio?: PortfolioOverview;
 };
 
 const PRESETS = [
@@ -115,7 +130,19 @@ function AiSectionsPicker({
   );
 }
 
-export function ReportsClient({ view, isAdmin, users, selectedUserId, from, to, includeAcademic, summary, teamData }: Props) {
+export function ReportsClient({
+  view,
+  isAdmin,
+  users,
+  selectedUserId,
+  from,
+  to,
+  includeAcademic,
+  scope,
+  summary,
+  teamData,
+  portfolio,
+}: Props) {
   const router = useRouter();
 
   function navigate(params: Record<string, string>) {
@@ -133,27 +160,36 @@ export function ReportsClient({ view, isAdmin, users, selectedUserId, from, to, 
     <div>
       <PageHeader
         title="Relatorios"
-        description="Relatorios de atividades e painel de produtividade da equipe."
+        description="Saude do portfolio, produtividade da equipe e relatorios individuais."
         actions={
           isAdmin ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => navigate({ view: "report" })}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${view === "report" ? "bg-brand text-white" : "text-muted hover:bg-surface2"}`}
-              >
-                <UserIcon size={14} className="mr-1 inline" />
-                Individual
-              </button>
-              <button
-                onClick={() => navigate({ view: "bi" })}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium ${view === "bi" ? "bg-brand text-white" : "text-muted hover:bg-surface2"}`}
-              >
-                <Users size={14} className="mr-1 inline" />
-                Equipe
-              </button>
+            <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border p-1">
+              {([
+                { id: "portfolio", label: "Portfolio", icon: <LayoutDashboard size={14} /> },
+                { id: "bi", label: "Equipe", icon: <Users size={14} /> },
+                { id: "report", label: "Individual", icon: <UserIcon size={14} /> },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => navigate({ view: tab.id })}
+                  className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                    view === tab.id ? "bg-brand text-white" : "text-muted hover:bg-surface2 hover:text-fg"
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
             </div>
           ) : undefined
         }
+      />
+
+      <WorkspaceScopeBar
+        label={scope.label}
+        scopedCount={scope.scopedCount}
+        visibleCount={scope.visibleCount}
+        focused={scope.focused}
       />
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -192,6 +228,8 @@ export function ReportsClient({ view, isAdmin, users, selectedUserId, from, to, 
           ))}
         </div>
       </div>
+
+      {view === "portfolio" && portfolio && <PortfolioDashboard data={portfolio} />}
 
       {view === "report" && summary && (
         <IndividualReport summary={summary} includeAcademic={includeAcademic} from={from} to={to} />
@@ -327,9 +365,15 @@ function IndividualReport({
         </p>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         <KpiCard icon={<CheckCircle2 size={16} />} label="Tarefas concluidas" value={k.tasksCompleted} />
         <KpiCard icon={<ClipboardList size={16} />} label="Em andamento" value={k.tasksInProgress} />
+        <KpiCard
+          icon={<AlertTriangle size={16} />}
+          label="Atrasadas"
+          value={k.tasksOverdue}
+          tone={k.tasksOverdue > 0 ? "danger" : "default"}
+        />
         <KpiCard icon={<FileText size={16} />} label="Entregaveis" value={k.deliverablesSubmitted} />
         <KpiCard icon={<MessageSquare size={16} />} label="Posts/Topicos" value={k.forumPosts} />
       </div>
@@ -455,14 +499,16 @@ function TeamDashboard({
   const [aiSections, setAiSections] = useState<AiAnalysisSection[]>(DEFAULT_AI);
 
   const totals = useMemo(() => {
-    let completed = 0, total = 0, events = 0, active = 0;
+    let completed = 0, total = 0, events = 0, active = 0, overdue = 0, accepted = 0;
     teamData.forEach((m) => {
       completed += m.tasksCompleted;
       total += m.tasksTotal;
       events += m.totalEvents;
+      overdue += m.tasksOverdue;
+      accepted += m.deliverablesAccepted;
       if (m.totalEvents > 0) active += 1;
     });
-    return { completed, total, events, active, members: teamData.length };
+    return { completed, total, events, active, overdue, accepted, members: teamData.length };
   }, [teamData]);
 
   const maxEvents = Math.max(...teamData.map((m) => m.totalEvents), 1);
@@ -544,11 +590,21 @@ function TeamDashboard({
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <KpiCard icon={<Users size={16} />} label="Membros ativos" value={totals.active} />
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+        <KpiCard
+          icon={<Users size={16} />}
+          label="Membros ativos"
+          value={totals.active}
+        />
         <KpiCard icon={<CheckCircle2 size={16} />} label="Tarefas concluidas" value={totals.completed} />
+        <KpiCard
+          icon={<AlertTriangle size={16} />}
+          label="Atribuicoes atrasadas"
+          value={totals.overdue}
+          tone={totals.overdue > 0 ? "danger" : "default"}
+        />
+        <KpiCard icon={<PackageCheck size={16} />} label="Entregaveis aceitos" value={totals.accepted} />
         <KpiCard icon={<BarChart3 size={16} />} label="Total de acoes" value={totals.events} />
-        <KpiCard icon={<ClipboardList size={16} />} label="Tarefas totais" value={totals.total} />
       </div>
 
       <Card className="overflow-x-auto p-4">
@@ -560,6 +616,9 @@ function TeamDashboard({
               <th className="pb-2 pr-3">Papel</th>
               <th className="pb-2 pr-3">Tarefas</th>
               <th className="pb-2 pr-3">Progresso</th>
+              <th className="pb-2 pr-3 text-right">Abertas</th>
+              <th className="pb-2 pr-3 text-right">Atraso</th>
+              <th className="pb-2 pr-3 text-right">Entregaveis</th>
               <th className="pb-2 pr-3">Acoes</th>
               <th className="pb-2 pr-3">Atividade</th>
               <th className="pb-2">Ultimo evento</th>
@@ -583,6 +642,15 @@ function TeamDashboard({
                     <span className="text-muted">/{m.tasksTotal}</span>
                   </td>
                   <td className="py-2 pr-3 min-w-[100px]"><ProgressBar value={pct} /></td>
+                  <td className="py-2 pr-3 text-right">{m.tasksOpen}</td>
+                  <td className="py-2 pr-3 text-right">
+                    {m.tasksOverdue > 0 ? (
+                      <span className="font-medium text-amber-500">{m.tasksOverdue}</span>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="py-2 pr-3 text-right">{m.deliverablesAccepted}</td>
                   <td className="py-2 pr-3">{m.totalEvents}</td>
                   <td className="py-2 pr-3 min-w-[80px]">
                     <div className="h-2 overflow-hidden rounded-full bg-surface2">
@@ -602,10 +670,26 @@ function TeamDashboard({
   );
 }
 
-function KpiCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function KpiCard({
+  icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  tone?: "default" | "danger";
+}) {
   return (
     <Card className="flex items-center gap-3 p-3">
-      <div className="rounded-lg bg-surface2 p-2 text-muted">{icon}</div>
+      <div
+        className={`shrink-0 rounded-lg p-2 ${
+          tone === "danger" ? "bg-red-500/15 text-red-500" : "bg-surface2 text-muted"
+        }`}
+      >
+        {icon}
+      </div>
       <div>
         <p className="text-xs text-muted">{label}</p>
         <p className="text-xl font-semibold">{value}</p>

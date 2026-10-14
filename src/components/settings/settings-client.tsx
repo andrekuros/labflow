@@ -12,6 +12,8 @@ import {
   createApiKeyAction,
   deleteApiKeyAction,
   saveAiSettingsAction,
+  getEmbeddingStatsAction,
+  reindexEmbeddingsAction,
 } from "@/app/actions/settings";
 import {
   syncNextcloudAction,
@@ -20,6 +22,7 @@ import {
   createNextcloudTemplateAction,
   getKnowledgeHealthAction,
 } from "@/plugins/knowledge/actions";
+import { listAgentRunsAction, type AgentRunRow } from "@/plugins/assistant/actions";
 import { TEMPLATE_CATALOG, type TemplateKey } from "@/plugins/knowledge/templates-catalog";
 import type { SettingsField } from "@/plugins/types";
 import type { UserPreferences } from "@/lib/user-preferences";
@@ -171,7 +174,11 @@ export function SettingsClient({
       {tab === "permissoes" && isAdmin && <PermissionsTab />}
 
       {tab === "ia" && isAdmin && (
-        <AiProviderForm initial={aiSettings} disabled={pending} onSave={(data) => start(() => saveAiSettingsAction(data))} />
+        <div className="space-y-4">
+          <AiProviderForm initial={aiSettings} disabled={pending} onSave={(data) => start(() => saveAiSettingsAction(data))} />
+          <EmbeddingIndexPanel />
+          <AgentRunsPanel />
+        </div>
       )}
 
       {tab === "conhecimento" && isAdmin && (
@@ -484,13 +491,242 @@ function AiProviderForm({
             value={embeddingModel}
             onChange={(e) => setEmbeddingModel(e.target.value)}
           />
-          <p className="mt-1 text-xs text-muted">Usado com OpenAI. Ollama usa embeddings locais automaticamente.</p>
+          <p className="mt-1 text-xs text-muted">
+            {provider === "ollama"
+              ? "Modelo de embedding servido pelo Ollama (ex: nomic-embed-text, mxbai-embed-large). Rode `ollama pull` antes de usar."
+              : provider === "openai"
+                ? "Modelo de embedding da API (ex: text-embedding-3-small)."
+                : "Sem provedor, a busca usa vetores locais hashed de baixa precisao."}
+            {" Trocar de modelo exige reindexar a base abaixo."}
+          </p>
         </div>
 
         <div className="md:col-span-2">
           <Button type="submit" size="sm" disabled={disabled}>Salvar configuracao de IA</Button>
         </div>
       </form>
+    </Card>
+  );
+}
+
+type EmbeddingStats = {
+  currentModel: string;
+  total: number;
+  current: number;
+  stale: number;
+  byModel: { modelName: string; count: number; dimensions: number | null }[];
+  degraded: boolean;
+  degradedReason?: string;
+};
+
+/**
+ * Health of the semantic index.
+ *
+ * Vectors are only comparable within one embedding model, so search ignores
+ * anything produced by a previous one. Without this panel a provider change
+ * would quietly empty the assistant's memory with no visible cause.
+ */
+function EmbeddingIndexPanel() {
+  const [stats, setStats] = useState<EmbeddingStats | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setStats(await getEmbeddingStatsAction());
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Falha ao ler estatisticas");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reindex() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const res = await reindexEmbeddingsAction();
+      setMessage(
+        res.error
+          ? res.error
+          : `Reindexacao concluida: ${res.indexed ?? 0} itens processados${res.failed ? `, ${res.failed} falharam` : ""}.`,
+      );
+      setStats(await getEmbeddingStatsAction());
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Falha ao reindexar");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 text-sm font-semibold">Indice semantico (RAG)</h2>
+      <p className="mb-4 text-sm text-muted">
+        A busca so considera vetores gerados pelo modelo de embedding ativo. Ao trocar de provedor ou de modelo,
+        reindexe para que o conteudo antigo volte a ser encontrado.
+      </p>
+
+      {!stats ? (
+        <Button size="sm" variant="outline" onClick={load} disabled={busy}>
+          {busy ? "Carregando..." : "Verificar indice"}
+        </Button>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div>
+              <p className="text-xs text-muted">Modelo ativo</p>
+              <p className="font-mono text-xs">{stats.currentModel}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Total de chunks</p>
+              <p className="font-medium">{stats.total}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Pesquisaveis</p>
+              <p className="font-medium">{stats.current}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Obsoletos</p>
+              <p className={cn("font-medium", stats.stale > 0 && "text-amber-600")}>{stats.stale}</p>
+            </div>
+          </div>
+
+          {stats.degraded && (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+              <span className="font-medium">Embeddings degradados.</span>{" "}
+              {stats.degradedReason ?? "O modelo configurado nao esta disponivel."} Ate resolver, a busca usa vetores
+              locais hashed, de precisao bem menor.
+            </p>
+          )}
+
+          {stats.stale > 0 && (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+              {stats.stale} chunk(s) foram gerados por outro modelo e estao invisiveis para a busca. Reindexe para recupera-los.
+            </p>
+          )}
+
+          {stats.byModel.length > 1 && (
+            <ul className="space-y-1 text-xs text-muted">
+              {stats.byModel.map((m) => (
+                <li key={`${m.modelName}-${m.dimensions}`} className="font-mono">
+                  {m.modelName} · {m.dimensions ?? "?"}d · {m.count}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={load} disabled={busy}>Atualizar</Button>
+            <Button size="sm" onClick={reindex} disabled={busy}>
+              {busy ? "Reindexando..." : "Reindexar tudo"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {message && <p className="mt-3 text-xs text-muted">{message}</p>}
+    </Card>
+  );
+}
+
+/**
+ * Recent assistant activity.
+ *
+ * Runs were recorded but never read anywhere, so there was no way to see what
+ * people ask, what fails, or what it costs.
+ */
+function AgentRunsPanel() {
+  const [runs, setRuns] = useState<AgentRunRow[] | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      setRuns(await listAgentRunsAction(25));
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Falha ao carregar execucoes");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const failures = runs?.filter((r) => r.status === "error").length ?? 0;
+  const latencies = (runs ?? []).map((r) => r.latencyMs).filter((v): v is number => typeof v === "number");
+  const medianLatency = latencies.length
+    ? [...latencies].sort((a, b) => a - b)[Math.floor(latencies.length / 2)]
+    : null;
+  const totalTokens = (runs ?? []).reduce(
+    (sum, r) => sum + (r.promptTokens ?? 0) + (r.completionTokens ?? 0),
+    0,
+  );
+
+  return (
+    <Card className="p-5">
+      <h2 className="mb-1 text-sm font-semibold">Execucoes do assistente</h2>
+      <p className="mb-4 text-sm text-muted">
+        Ultimas perguntas, latencia, tokens e ferramentas usadas. Util para descobrir o que falha e o que custa.
+      </p>
+
+      {runs === null ? (
+        <Button size="sm" variant="outline" onClick={load} disabled={busy}>
+          {busy ? "Carregando..." : "Carregar execucoes"}
+        </Button>
+      ) : runs.length === 0 ? (
+        <p className="text-sm text-muted">
+          Nenhuma execucao registrada ainda. Faca uma pergunta em <span className="font-mono text-xs">/assistant</span>.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div>
+              <p className="text-xs text-muted">Execucoes</p>
+              <p className="font-medium">{runs.length}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Com erro</p>
+              <p className={cn("font-medium", failures > 0 && "text-amber-600")}>{failures}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Latencia mediana</p>
+              <p className="font-medium">{medianLatency !== null ? `${(medianLatency / 1000).toFixed(1)}s` : "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted">Tokens</p>
+              <p className="font-medium">{totalTokens > 0 ? totalTokens.toLocaleString("pt-BR") : "—"}</p>
+            </div>
+          </div>
+
+          <div className="max-h-80 space-y-2 overflow-y-auto">
+            {runs.map((r) => (
+              <div key={r.id} className="rounded-lg border border-border p-2 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="line-clamp-2 flex-1 font-medium">{r.input}</p>
+                  {r.status === "error" && <Badge color="#f59e0b">erro</Badge>}
+                </div>
+                <p className="mt-1 text-muted">
+                  {new Date(r.createdAt).toLocaleString("pt-BR")}
+                  {r.userName ? ` · ${r.userName}` : ""}
+                  {r.latencyMs !== null ? ` · ${(r.latencyMs / 1000).toFixed(1)}s` : ""}
+                  {r.promptTokens || r.completionTokens
+                    ? ` · ${(r.promptTokens ?? 0) + (r.completionTokens ?? 0)} tokens`
+                    : ""}
+                  {r.toolsUsed.length ? ` · ferramentas: ${r.toolsUsed.join(", ")}` : ""}
+                </p>
+                {r.error && <p className="mt-1 text-amber-600">{r.error}</p>}
+              </div>
+            ))}
+          </div>
+
+          <Button size="sm" variant="outline" onClick={load} disabled={busy}>Atualizar</Button>
+        </div>
+      )}
+
+      {message && <p className="mt-3 text-xs text-muted">{message}</p>}
     </Card>
   );
 }

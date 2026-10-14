@@ -48,6 +48,11 @@ export function registerPlugin(manifest: PluginManifest) {
   s.manifests.set(manifest.id, manifest);
   if (!prev) {
     wireManifest(manifest);
+    // A manifest seen for the first time must also invalidate the built plugin
+    // list. Without this, a plugin added while the registry cache is warm stays
+    // absent from `listPlugins()` — its routes 404 and its nav never appears,
+    // even though the Plugin row exists and is enabled.
+    s.initialized = false;
   } else if (
     prev.name !== manifest.name ||
     prev.version !== manifest.version ||

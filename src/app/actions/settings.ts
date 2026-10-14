@@ -18,6 +18,8 @@ import {
   invalidateAiConfigCache,
   isMaskedApiKey,
 } from "@/lib/ai/config";
+import { embeddingIndexStats } from "@/lib/ai/rag";
+import { reindexAll } from "@/lib/ai/knowledge-indexer";
 
 export async function getSettingsData() {
   await requireAdmin();
@@ -114,10 +116,36 @@ export async function saveAiSettingsAction(input: {
     merged.aiApiKey = input.aiApiKey;
   }
 
-  invalidateAiConfigCache();
   await setPluginSettings("assistant", merged);
+  // Invalidate after the write: a read racing the update would otherwise
+  // repopulate the cache with the old configuration.
+  invalidateAiConfigCache();
   revalidatePath("/settings");
   revalidatePath("/assistant");
+}
+
+/**
+ * Health of the semantic index. `stale` counts vectors produced by a previous
+ * embedding model — they are invisible to search until reindexed.
+ */
+export async function getEmbeddingStatsAction() {
+  await requireAdmin();
+  await ensurePluginRegistry();
+  return embeddingIndexStats();
+}
+
+/** Rebuild every embedding with the currently configured model. */
+export async function reindexEmbeddingsAction(): Promise<{ error?: string; indexed?: number; failed?: number }> {
+  await requireAdmin();
+  await ensurePluginRegistry();
+  try {
+    const result = await reindexAll();
+    revalidatePath("/settings");
+    revalidatePath("/assistant");
+    return result;
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Falha ao reindexar" };
+  }
 }
 
 export async function savePluginProjectSettingsAction(

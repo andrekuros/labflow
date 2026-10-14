@@ -48,6 +48,10 @@ import { reportsManifest } from "@/plugins/reports/manifest";
 import { handlers as reportsApi } from "@/plugins/reports/api";
 import { activityLogManifest } from "@/plugins/activity-log/manifest";
 import { handlers as activityLogApi } from "@/plugins/activity-log/api";
+import { ganttManifest } from "@/plugins/gantt/manifest";
+import { handlers as ganttApi } from "@/plugins/gantt/api";
+import { repositoryManifest } from "@/plugins/repository/manifest";
+import { handlers as repositoryApi } from "@/plugins/repository/api";
 
 const BUILTIN_PLUGINS = [
   projectsManifest,
@@ -66,6 +70,8 @@ const BUILTIN_PLUGINS = [
   papersManifest,
   feedbackManifest,
   planningManifest,
+  ganttManifest,
+  repositoryManifest,
   reportsManifest,
   activityLogManifest,
   examplePlugin,
@@ -88,6 +94,8 @@ const API_REGISTRATIONS: [string, typeof teamApi][] = [
   ["papers", papersApi],
   ["feedback", feedbackApi],
   ["planning", planningApi],
+  ["gantt", ganttApi],
+  ["repository", repositoryApi],
   ["reports", reportsApi],
   ["activity-log", activityLogApi],
 ];

@@ -48,6 +48,7 @@ model User {
   assignedFeedbacks Feedback[]        @relation("FeedbackAssignee")
   feedbackComments  FeedbackComment[]
   profiles          UserProfile[]
+  repositoryRecords RepositoryRecord[] @relation("RepoSubmitter")
 }
 
 /** Perfis acumulativos do usuario (admin, pesquisador, mestrando, etc.). */
@@ -114,6 +115,7 @@ model Project {
   verificationCases VerificationCase[]
   aiDrafts     AiDraft[]
   feedbacks    Feedback[]
+  repositoryRecords RepositoryRecord[]
 }
 
 // Academic tracking for graduate students.
@@ -405,9 +407,14 @@ model Embedding {
   vector     String
   modelName  String?
   dimensions Int?
+  // sha256 do texto de origem: permite pular reembedding de conteudo inalterado
+  contentHash String?
   createdAt  DateTime @default(now())
 
   @@index([sourceType, sourceId])
+  // Search filters by model compatibility, then by project/source type.
+  @@index([modelName])
+  @@index([projectId, sourceType])
 }
 
 // Links between knowledge articles and work items (task, deliverable, requirement, project).
@@ -574,7 +581,16 @@ model AgentRun {
   output    String   @default("")
   // status: pending | running | done | error
   status    String   @default("done")
+  // Observabilidade: sem isso nao ha como saber o que falha nem quanto custa
+  latencyMs        Int?
+  promptTokens     Int?
+  completionTokens Int?
+  // JSON: nomes das ferramentas executadas nesta run
+  toolsUsed String?
+  error     String?
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------------------
@@ -639,4 +655,154 @@ model RolePermission {
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
   @@id([role, permissionId])
+}
+
+// ---------------------------------------------------------------------------
+// Institutional repository (DSpace / Invenio style)
+//
+// Distinct from KnowledgeArticle on purpose: the library is a wiki mirrored from
+// a Nextcloud vault, while a repository record is a citable deposit with real
+// bibliographic metadata, one or more file bitstreams, a stable handle and
+// versioning. Files live on local disk by default (see lib/repository/storage.ts)
+// so the repository never depends on Nextcloud being configured.
+// ---------------------------------------------------------------------------
+
+/// Community / collection tree that records are deposited into.
+model RepositoryCollection {
+  id          String  @id @default(cuid())
+  parent      RepositoryCollection?  @relation("RepoCollectionTree", fields: [parentId], references: [id], onDelete: SetNull)
+  parentId    String?
+  children    RepositoryCollection[] @relation("RepoCollectionTree")
+  slug        String  @unique
+  name        String
+  description String  @default("")
+  // icon: lucide icon name for the browse sidebar
+  icon        String?
+  color       String  @default("#6366f1")
+  // visibility: public | members | admin — the floor for records inside
+  visibility  String  @default("members")
+  order       Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  records RepositoryRecord[]
+
+  @@index([parentId, order])
+}
+
+/// Controlled vocabulary of subjects/categories, so browsing is not tag soup.
+model RepositorySubject {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  label     String
+  parentSlug String?
+  createdAt DateTime @default(now())
+
+  @@index([parentSlug])
+}
+
+/// A citable deposit: metadata + files + links.
+model RepositoryRecord {
+  id           String  @id @default(cuid())
+  collection   RepositoryCollection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
+  collectionId String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId    String?
+  submitter    User?   @relation("RepoSubmitter", fields: [submitterId], references: [id], onDelete: SetNull)
+  submitterId  String?
+
+  // Stable citation id, e.g. "labflow/2026/000123". Never reused.
+  handle       String  @unique
+  title        String
+  subtitle     String?
+  abstract     String  @default("")
+  // resourceType: article | thesis | dissertation | dataset | report | presentation
+  //             | software | protocol | image | standard | other
+  resourceType String  @default("article")
+  // JSON array: [{ name, affiliation?, orcid?, role? }]
+  authorsJson  String  @default("[]")
+  publisher    String?
+  // Venue / journal / conference
+  venue        String?
+  publishedAt  DateTime?
+  year         Int?
+  // ISO 639-1
+  language     String  @default("pt")
+  doi          String?
+  isbn         String?
+  issn         String?
+  externalUrl  String?
+  // SPDX-ish license id, e.g. "cc-by-4.0"
+  license      String?
+  rights       String?
+  // comma-separated free tags
+  tags         String  @default("")
+  // JSON array of RepositorySubject slugs
+  subjectsJson String  @default("[]")
+  citation     String?
+  notes        String  @default("")
+  // status: draft | submitted | published | withdrawn
+  status       String  @default("draft")
+  // visibility: public | members | admin
+  visibility   String  @default("members")
+
+  version      Int     @default(1)
+  supersedes   RepositoryRecord?  @relation("RepoRecordVersions", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersedesId String?
+  versions     RepositoryRecord[] @relation("RepoRecordVersions")
+
+  // Concatenated text of every file, kept for search and RAG ingestion.
+  fullText      String @default("")
+  viewCount     Int    @default(0)
+  downloadCount Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  files RepositoryFile[]
+  links RepositoryLink[]
+
+  @@index([collectionId, status])
+  @@index([projectId])
+  @@index([resourceType, year])
+  @@index([status, visibility])
+}
+
+/// One bitstream of a record.
+model RepositoryFile {
+  id       String @id @default(cuid())
+  record   RepositoryRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  recordId String
+  fileName String
+  mimeType String
+  byteSize Int
+  // sha256 of the bytes — dedup and integrity checks
+  checksum String
+  // storage: local | nextcloud
+  storage  String @default("local")
+  // Path relative to the storage root (local) or the vault (nextcloud)
+  storagePath String
+  // bundle: primary | supplement | thumbnail | license
+  bundle   String @default("primary")
+  extractedText String @default("")
+  order    Int    @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([recordId, order])
+  @@index([checksum])
+}
+
+/// Link from a record to LabFlow work items or to another record.
+model RepositoryLink {
+  id       String @id @default(cuid())
+  record   RepositoryRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  recordId String
+  // targetType: project | task | deliverable | requirement | article | record | user
+  targetType String
+  targetId   String
+  createdBy  String?
+  createdAt  DateTime @default(now())
+
+  @@unique([recordId, targetType, targetId])
+  @@index([targetType, targetId])
 }
